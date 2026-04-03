@@ -117,14 +117,17 @@ void bitonic_sort_msb3_tiebreak_last2(uint32_t *mag_q,
                                       const int MSB_NUM,
                                       const int LSB_NUM)
 {
+    int cae_layer = 0;
 
     for (uint64_t w = 2; w <= n; w <<= 1) {
 
-        // last 2 stages => w >= n/2 (for n=128 -> w=64,128)
-        int use_tiebreak = (w >= (n >> 1));
-
         for (uint64_t j = (w >> 1); j > 0; j >>= 1) {
-            
+
+            cae_layer++;
+
+            /* staged PA: refine only at global CAE layers 28 and 36 */
+            int use_tiebreak = (cae_layer == 28 || cae_layer == 36);
+    
             for (uint64_t i = 0; i < n; i++) {
 
                 uint64_t l = i ^ j;
@@ -173,8 +176,7 @@ void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint
     const int LSB_NUM = 2; // number of LSBs to use as tie-break
 
     // round n up to next power of two
-    uint64_t n_effective = 1;
-    while (n_effective < n) n_effective *= 2;
+    uint64_t n_effective = 256;
 
     // allocate arrays of size n_effective
     uint32_t *LLR_mag_q = (uint32_t *)calloc(n_effective, sizeof(uint32_t));
