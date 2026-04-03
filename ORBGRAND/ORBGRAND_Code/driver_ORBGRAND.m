@@ -1,6 +1,6 @@
 % Simulation peforms decoding with OBRGRAND
 clear;
-DECODER='ORBGRAND-MSB-4';
+DECODER='ORBGRAND-MSB-TIEBREAK';
 %% Code parameters
 % Modulation schemes available using MATLAB's toolbox, which will be used
 % in a complex-valued channel
@@ -13,7 +13,7 @@ nmodbits = bpsList(strcmpi(modlist,modulation));
 
 % Pick the code
 % RLC, PAC, CAPOLAR, BCH, eBCH or CRC. 
-code_class = 'CRC';
+code_class = 'CAPOLAR';
 
 % Random Linear Code
 if isequal(code_class,'RLC')
@@ -146,8 +146,8 @@ for ii=1:numSNR
             % Count the demodulated bit errors
             num_demod_bit_errs(ii) = num_demod_bit_errs(ii)+sum(abs(y_demod-c));
         end
-        if isequal(DECODER,'ORBGRAND-MSB-4')
-            [y_decoded,n_guess] = ORBGRAND_msb4_quant_mex(y_soft',uint8(reshape(H', [], 1)),uint64(max_query));
+        if isequal(DECODER,'ORBGRAND-MSB-TIEBREAK')
+            [y_decoded,n_guess] = ORBGRAND_msb_tiebreak_quant_mex(y_soft',uint8(reshape(H', [], 1)),uint64(max_query));
             y_decoded =y_decoded';
         elseif isequal(DECODER,'ORBGRAND_C')
         % Decode with basic ORBGRAND C implementation

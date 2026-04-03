@@ -106,8 +106,7 @@ void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint
     const int B_mag = B - 1;
 
     // round n up to next power of two
-    uint64_t n_effective = 1;
-    while (n_effective < n) n_effective *= 2;
+    uint64_t n_effective = 256;
 
     // allocate arrays of size n_effective
     double *LLR_mag_q = (double *)calloc(n_effective, sizeof(double));

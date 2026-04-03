@@ -126,7 +126,7 @@ void bitonic_sort_msb3_tiebreak_last2(uint32_t *mag_q,
             cae_layer++;
 
             /* staged PA: refine only at global CAE layers 28 and 36 */
-            int use_tiebreak = (cae_layer == 28 || cae_layer == 36);
+            int use_tiebreak = (cae_layer == 27 || cae_layer == 28 || cae_layer == 35 || cae_layer == 36);
     
             for (uint64_t i = 0; i < n; i++) {
 
