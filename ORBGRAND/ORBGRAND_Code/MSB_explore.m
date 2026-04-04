@@ -5,18 +5,18 @@ set(groot,'defaultTextInterpreter','latex');
 set(groot,'defaultLegendInterpreter','latex');
 set(groot,'defaultAxesTickLabelInterpreter','latex');
 
-n = 128;
-k = 116;
+n = 256;
+k = 240;
 n_CODES = 0;
 
-code.class = 'CAPOLAR';
-
+code.class = 'CRC';
+poly='0xd175';
 % -------------------------
 % Load baseline
 % -------------------------
 DECODER = 'ORBGRAND-BASELINE';
 n_CODES = n_CODES + 1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
+filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
 code.decoder = 'Baseline';
 code.LT = '-d';
@@ -28,7 +28,7 @@ codes(n_CODES).code = code;
 % -------------------------
 DECODER = 'ORBGRAND-MSB-2';
 n_CODES = n_CODES + 1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
+filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
 code.decoder = 'MSB$_2$';
 code.LT = '-o';
@@ -40,7 +40,7 @@ codes(n_CODES).code = code;
 % -------------------------
 DECODER = 'ORBGRAND-MSB-3';
 n_CODES = n_CODES + 1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
+filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
 code.decoder = 'MSB$_3$';
 code.LT = '-s';
@@ -52,7 +52,7 @@ codes(n_CODES).code = code;
 % -------------------------
 DECODER = 'ORBGRAND-MSB-4';
 n_CODES = n_CODES + 1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
+filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
 code.decoder = 'MSB$_4$';
 code.LT = '-^';
