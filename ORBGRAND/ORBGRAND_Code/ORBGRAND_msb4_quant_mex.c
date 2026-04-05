@@ -110,7 +110,8 @@ void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint
     uint64_t pad_val   = (1ULL << MSB_NUM) - 1;
 
     // round n up to next power of two
-    uint64_t n_effective = 256;
+    uint64_t n_effective = 1;
+    while (n_effective < n) n_effective *= 2;
 
     // allocate arrays of size n_effective
     double *LLR_mag_q = (double *)calloc(n_effective, sizeof(double));

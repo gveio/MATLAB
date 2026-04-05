@@ -178,7 +178,8 @@ void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint
     const int LSB_NUM = 2; // number of LSBs to use as tie-break
 
     // round n up to next power of two
-    uint64_t n_effective = 256;
+    uint64_t n_effective = 1;
+    while (n_effective < n) n_effective *= 2;
 
     // allocate arrays of size n_effective
     uint32_t *LLR_mag_q = (uint32_t *)calloc(n_effective, sizeof(uint32_t));
