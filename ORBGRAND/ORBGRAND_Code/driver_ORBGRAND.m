@@ -1,6 +1,6 @@
 % Simulation peforms decoding with OBRGRAND
 clear;
-DECODER='ORBGRAND-BASELINE';
+DECODER='ORBGRAND-MSB-TIEBREAK';
 %% Code parameters
 % Modulation schemes available using MATLAB's toolbox, which will be used
 % in a complex-valued channel
@@ -13,7 +13,7 @@ nmodbits = bpsList(strcmpi(modlist,modulation));
 
 % Pick the code
 % RLC, PAC, CAPOLAR, BCH, eBCH or CRC. 
-code_class = 'CRC';
+code_class = 'CAPOLAR';
 
 % Random Linear Code
 if isequal(code_class,'RLC')
