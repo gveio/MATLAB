@@ -32,7 +32,7 @@ n_CODES = 0;
 codes128 = struct([]);
 
 % ---- PA
-DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
+DECODER = 'ORBGRAND-MSB3-TIEBREAK2-PRUNED';
 code.class = 'CAPOLAR';
 n_CODES = n_CODES + 1;
 filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
@@ -84,7 +84,7 @@ n_CODES = 0;
 codes256 = struct([]);
 
 % ---- PA
-DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
+DECODER = 'ORBGRAND-MSB3-TIEBREAK2-PRUNED';
 code.class = 'CRC';
 poly = '0xd175';
 n_CODES = n_CODES + 1;
