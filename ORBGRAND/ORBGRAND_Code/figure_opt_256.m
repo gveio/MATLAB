@@ -10,28 +10,6 @@ k=240;
 n_CODES = 0;
 
 % ORBGRAND
-DECODER = 'ORBGRAND-BASELINE';
-
-code.class = 'CRC';
-poly='0xd175';
-n_CODES=n_CODES+1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
-load(filename,'code');
-code.decoder = [DECODER ' ' poly];
-code.LT = '-^';
-code.color = 'r';
-codes(n_CODES).code = code; 
-
-code.class = 'RLC';
-n_CODES=n_CODES+1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
-load(filename,'code');
-code.decoder = DECODER;
-code.LT = '-^';
-code.color = 'b';
-codes(n_CODES).code = code; 
-
-
 DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
 
 code.class = 'CRC';
@@ -40,19 +18,22 @@ n_CODES=n_CODES+1;
 filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
 code.decoder = [DECODER ' ' poly];
-code.LT = '-v';
+code.LT = '-^';
 code.color = 'r';
 codes(n_CODES).code = code; 
 
-code.class = 'RLC';
-n_CODES=n_CODES+1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
-load(filename,'code');
-code.decoder = DECODER;
-code.LT = '-v';
-code.color = 'b';
-codes(n_CODES).code = code; 
 
+DECODER = 'ORBGRAND-BASELINE';
+
+code.class = 'CRC';
+poly='0xd175';
+n_CODES=n_CODES+1;
+filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
+load(filename,'code');
+code.decoder = [DECODER ' ' poly];
+code.LT = '-v';
+code.color = 'r';
+codes(n_CODES).code = code; 
 
 make_fig(codes,1)
 

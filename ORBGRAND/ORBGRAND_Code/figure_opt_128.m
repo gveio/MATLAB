@@ -9,16 +9,7 @@ n=128;
 k=116;
 n_CODES = 0;
 
-DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
-
-code.class = 'BCH';
-n_CODES=n_CODES+1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n-1) '_' num2str(k-3) '_1.mat'];
-load(filename,'code');
-code.decoder = DECODER;
-code.LT = '-^';
-code.color = 'r';
-codes(n_CODES).code = code; 
+DECODER = 'ORBGRAND-BASELINE';
 
 code.class = 'CAPOLAR';
 n_CODES=n_CODES+1;
@@ -29,16 +20,7 @@ code.LT = '-^';
 code.color = 'b';
 codes(n_CODES).code = code; 
 
-DECODER = 'ORBGRAND-BASELINE';
-
-code.class = 'BCH';
-n_CODES=n_CODES+1;
-filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n-1) '_' num2str(k-3) '_1.mat'];
-load(filename,'code');
-code.decoder = DECODER;
-code.LT = '-v';
-code.color = 'r';
-codes(n_CODES).code = code; 
+DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
 
 code.class = 'CAPOLAR';
 n_CODES=n_CODES+1;
