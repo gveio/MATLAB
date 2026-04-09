@@ -1,6 +1,6 @@
 % Simulation peforms decoding with OBRGRAND
 clear;
-DECODER='ORBGRAND-MSB3-TIEBREAK2';
+DECODER='ORBGRAND-MSB3-TIEBREAK1';
 %% Code parameters
 % Modulation schemes available using MATLAB's toolbox, which will be used
 % in a complex-valued channel
@@ -146,8 +146,8 @@ for ii=1:numSNR
             % Count the demodulated bit errors
             num_demod_bit_errs(ii) = num_demod_bit_errs(ii)+sum(abs(y_demod-c));
         end
-        if isequal(DECODER,'ORBGRAND-MSB3-TIEBREAK2')
-            [y_decoded,n_guess] = ORBGRAND_msb_tiebreak2_quant_mex(y_soft',uint8(reshape(H', [], 1)),uint64(max_query));
+        if isequal(DECODER,'ORBGRAND-MSB3-TIEBREAK1')
+            [y_decoded,n_guess] = ORBGRAND_msb_tiebreak1_quant_mex(y_soft',uint8(reshape(H', [], 1)),uint64(max_query));
             y_decoded =y_decoded';
         elseif isequal(DECODER,'ORBGRAND_C')
         % Decode with basic ORBGRAND C implementation
