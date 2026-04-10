@@ -19,9 +19,13 @@ sty.MSB3.decoder     = 'MSB$_3$';
 sty.MSB3.LT          = '-d';
 sty.MSB3.color       = [0.85 0.33 0.10];
 
-sty.PA.decoder       = 'PA';
-sty.PA.LT            = '-^';
-sty.PA.color         = [0.47 0.67 0.19];
+sty.PA1.decoder      = 'PA$_1$';
+sty.PA1.LT           = '-^';
+sty.PA1.color        = [0.47 0.67 0.19];
+
+sty.PA2.decoder      = 'PA$_2$';
+sty.PA2.LT           = '-v';
+sty.PA2.color        = [0.49 0.18 0.56];
 
 %% =========================
 %  LOAD n = 128, k = 116
@@ -31,15 +35,26 @@ k = 116;
 n_CODES = 0;
 codes128 = struct([]);
 
-% ---- PA
-DECODER = 'ORBGRAND-MSB3-TIEBREAK2-PRUNED';
+% ---- PA1
+DECODER = 'ORBGRAND-MSB3-TIEBREAK1';
 code.class = 'CAPOLAR';
 n_CODES = n_CODES + 1;
 filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
-code.decoder = sty.PA.decoder;
-code.LT      = sty.PA.LT;
-code.color   = sty.PA.color;
+code.decoder = sty.PA1.decoder;
+code.LT      = sty.PA1.LT;
+code.color   = sty.PA1.color;
+codes128(n_CODES).code = code;
+
+% ---- PA2
+DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
+code.class = 'CAPOLAR';
+n_CODES = n_CODES + 1;
+filename = ['../RESULTS/' DECODER '_' code.class '_' num2str(n) '_' num2str(k) '_1.mat'];
+load(filename,'code');
+code.decoder = sty.PA2.decoder;
+code.LT      = sty.PA2.LT;
+code.color   = sty.PA2.color;
 codes128(n_CODES).code = code;
 
 % ---- Baseline
@@ -83,16 +98,28 @@ k = 240;
 n_CODES = 0;
 codes256 = struct([]);
 
-% ---- PA
-DECODER = 'ORBGRAND-MSB3-TIEBREAK2-PRUNED';
+% ---- PA1
+DECODER = 'ORBGRAND-MSB3-TIEBREAK1';
 code.class = 'CRC';
 poly = '0xd175';
 n_CODES = n_CODES + 1;
 filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
-code.decoder = sty.PA.decoder;
-code.LT      = sty.PA.LT;
-code.color   = sty.PA.color;
+code.decoder = sty.PA1.decoder;
+code.LT      = sty.PA1.LT;
+code.color   = sty.PA1.color;
+codes256(n_CODES).code = code;
+
+% ---- PA2
+DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
+code.class = 'CRC';
+poly = '0xd175';
+n_CODES = n_CODES + 1;
+filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
+load(filename,'code');
+code.decoder = sty.PA2.decoder;
+code.LT      = sty.PA2.LT;
+code.color   = sty.PA2.color;
 codes256(n_CODES).code = code;
 
 % ---- Baseline
@@ -140,12 +167,23 @@ function make_fig_combined(codes128,codes256,fig_no)
 
     FONT = 13;
     AXIS_FONT = 11;
+    TITLE_FONT = 11;
+    LEG_FONT = 8;
     MS = 6.5;
     LW = 1.4;
 
     XLIM_ZOOM = [4 7];
-    YLIM_FER  = [6e-6 3e-1];
-    YTICK_FER = [1e-5 1e-4 1e-3 1e-2 1e-1];
+
+    % --- FER settings (increasing order as requested)
+    YLIM_FER  = [1e-5 1e0];
+    YTICK_FER = [1e-5 1e-4 1e-3 1e-2 1e-1 1e0];
+
+    % --- Avg. queries settings (explicit limits to avoid mismatch)
+    YLIM_EG_128  = [1e0 1e5];
+    YTICK_EG_128 = [1e0 1e1 1e2 1e3 1e4 1e5];
+
+    YLIM_EG_256  = [1e0 1e5];
+    YTICK_EG_256 = [1e0 1e1 1e2 1e3 1e4 1e5];
 
     labels128 = make_labels(codes128);
     labels256 = make_labels(codes256);
@@ -156,10 +194,10 @@ function make_fig_combined(codes128,codes256,fig_no)
     set(gcf,'Position',[1 1 20.5 12.8]);
     set(gcf,'Renderer','painters');
 
-    t = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+    tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
 
     % ===================== 128 FER =====================
-    ax1 = nexttile(1);
+    ax1 = nexttile(1);   % top-left
     hold(ax1,'on');
     h128 = gobjects(length(codes128),1);
     for ii = 1:length(codes128)
@@ -175,27 +213,10 @@ function make_fig_combined(codes128,codes256,fig_no)
     style_axis_small(ax1,AXIS_FONT,XLIM_ZOOM,YLIM_FER,YTICK_FER);
     xlabel(ax1,'$E_b/N_0$ (dB)','FontSize',FONT);
     ylabel(ax1,'$\mathrm{FER}$','FontSize',FONT);
-    title(ax1,'$(128,116)$ CA-Polar','FontSize',FONT);
-
-    % ===================== 128 EG =====================
-    ax2 = nexttile(2);
-    hold(ax2,'on');
-    for ii = 1:length(codes128)
-        code = codes128(ii).code;
-        plot(ax2, code.ebn0, code.EG, code.LT, ...
-            'DisplayName', labels128{ii}, ...
-            'Color', code.color, ...
-            'LineWidth', LW, ...
-            'MarkerSize', MS, ...
-            'MarkerFaceColor', 'w');
-    end
-    hold(ax2,'off');
-    style_axis_small(ax2,AXIS_FONT,XLIM_ZOOM,[],[1e0 1e1 1e2 1e3]);
-    xlabel(ax2,'$E_b/N_0$ (dB)','FontSize',FONT);
-    ylabel(ax2,'Avg. codebook queries','FontSize',FONT);
+    title(ax1,'(a) CA-Polar $(128,116)$','FontSize',TITLE_FONT,'FontWeight','normal');
 
     % ===================== 256 FER =====================
-    ax3 = nexttile(3);
+    ax3 = nexttile(2);   % top-right
     hold(ax3,'on');
     h256 = gobjects(length(codes256),1);
     for ii = 1:length(codes256)
@@ -211,10 +232,27 @@ function make_fig_combined(codes128,codes256,fig_no)
     style_axis_small(ax3,AXIS_FONT,XLIM_ZOOM,YLIM_FER,YTICK_FER);
     xlabel(ax3,'$E_b/N_0$ (dB)','FontSize',FONT);
     ylabel(ax3,'$\mathrm{FER}$','FontSize',FONT);
-    title(ax3,'$(256,240)$ CRC','FontSize',FONT);
+    title(ax3,'(b) CRC $(256,240)$','FontSize',TITLE_FONT,'FontWeight','normal');
+
+    % ===================== 128 EG =====================
+    ax2 = nexttile(3);   % bottom-left
+    hold(ax2,'on');
+    for ii = 1:length(codes128)
+        code = codes128(ii).code;
+        plot(ax2, code.ebn0, code.EG, code.LT, ...
+            'DisplayName', labels128{ii}, ...
+            'Color', code.color, ...
+            'LineWidth', LW, ...
+            'MarkerSize', MS, ...
+            'MarkerFaceColor', 'w');
+    end
+    hold(ax2,'off');
+    style_axis_small(ax2,AXIS_FONT,XLIM_ZOOM,YLIM_EG_128,YTICK_EG_128);
+    xlabel(ax2,'$E_b/N_0$ (dB)','FontSize',FONT);
+    ylabel(ax2,'Avg. codebook queries','FontSize',FONT);
 
     % ===================== 256 EG =====================
-    ax4 = nexttile(4);
+    ax4 = nexttile(4);   % bottom-right
     hold(ax4,'on');
     for ii = 1:length(codes256)
         code = codes256(ii).code;
@@ -226,7 +264,7 @@ function make_fig_combined(codes128,codes256,fig_no)
             'MarkerFaceColor', 'w');
     end
     hold(ax4,'off');
-    style_axis_small(ax4,AXIS_FONT,XLIM_ZOOM,[],[1e0 1e1 1e2 1e3 1e4 1e5]);
+    style_axis_small(ax4,AXIS_FONT,XLIM_ZOOM,YLIM_EG_256,YTICK_EG_256);
     xlabel(ax4,'$E_b/N_0$ (dB)','FontSize',FONT);
     ylabel(ax4,'Avg. codebook queries','FontSize',FONT);
 
@@ -234,7 +272,7 @@ function make_fig_combined(codes128,codes256,fig_no)
     lgd1 = legend(ax2,h128,labels128, ...
         'Interpreter','latex', ...
         'Location','northeast', ...
-        'FontSize',8, ...
+        'FontSize',LEG_FONT, ...
         'Box','on');
     lgd1.NumColumns = 1;
     lgd1.ItemTokenSize = [14 8];
@@ -242,7 +280,7 @@ function make_fig_combined(codes128,codes256,fig_no)
     lgd2 = legend(ax4,h256,labels256, ...
         'Interpreter','latex', ...
         'Location','northeast', ...
-        'FontSize',8, ...
+        'FontSize',LEG_FONT, ...
         'Box','on');
     lgd2.NumColumns = 1;
     lgd2.ItemTokenSize = [14 8];

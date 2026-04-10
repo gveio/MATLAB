@@ -26,7 +26,7 @@ codes(n_CODES).code = code;
 % -------------------------
 % Load MSB2
 % -------------------------
-DECODER = 'ORBGRAND-MSB3-TIEBREAK1';
+DECODER = 'ORBGRAND-MSB-2';
 n_CODES = n_CODES + 1;
 filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num2str(k) '_1.mat'];
 load(filename,'code');
