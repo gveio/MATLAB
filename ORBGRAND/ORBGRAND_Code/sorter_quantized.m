@@ -30,7 +30,7 @@ clear; clc;
 %% ----------------------------------------------------------
 % User options
 % -----------------------------------------------------------
-code_class  = 'CRC';       % 'CAPOLAR' or 'CRC'
+code_class  = 'CAPOLAR';       % 'CAPOLAR' or 'CRC'
 ebn0        = 7;       % Eb/N0 sweep
 nFrames     = 2e4;         % Monte Carlo frames per SNR
 LWmax       = 104;         % decoder-relevant top-K region

@@ -2,15 +2,21 @@
  * Bitonic sorter MEX for true-valued and quantized LLR sorting
  *
  * Input:
- *   y_soft : real double vector of channel LLRs
- *   mode   : scalar
- *            0 -> true-valued reference: sort abs(y_soft)
- *            1 -> baseline quantized (full 5-bit magnitude)
- *            2 -> MSB2
- *            3 -> MSB3
- *            4 -> MSB4
- *            5 -> PA1 = MSB3 + LSB1 tie-break in final 2 stages
- *            6 -> PA2 = MSB3 + LSB2 tie-break in final 2 stages
+ *   y_soft                 : real double vector of channel LLRs
+ *   mode                   : scalar
+ *                            0 -> true-valued reference: sort abs(y_soft)
+ *                            1 -> baseline quantized (full 5-bit magnitude)
+ *                            2 -> MSB2
+ *                            3 -> MSB3
+ *                            4 -> MSB4
+ *                            5 -> PA1 = MSB3 + LSB1 tie-break in final stages
+ *                            6 -> PA2 = MSB3 + LSB2 tie-break in final stages
+ *   n_sort_effective_forced: optional scalar
+ *                            0 or omitted -> use next_pow2(n)
+ *                            e.g. 256     -> force sorting network length to 256
+ *   n_tie_effective_forced : optional scalar
+ *                            0 or omitted -> use n_sort_effective
+ *                            e.g. 256     -> force tie-break schedule to 256
  *
  * Output:
  *   sorted_idx : sorted reliability indices (1-based for MATLAB)
@@ -18,6 +24,7 @@
 
 #include "mex.h"
 #include <math.h>
+#include <float.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +35,11 @@ static uint64_t next_pow2_u64(uint64_t x)
     uint64_t p = 1;
     while (p < x) p <<= 1;
     return p;
+}
+
+static int is_pow2_u64(uint64_t x)
+{
+    return (x != 0) && ((x & (x - 1)) == 0);
 }
 
 /* ----------------------------------------------------------
@@ -151,21 +163,27 @@ static inline int key_lt(uint32_t a, uint32_t b, int use_tiebreak,
 
 /* ----------------------------------------------------------
  * Bitonic sort for PA1 / PA2
+ *
+ * n_sort_effective : active sorting network size
+ * n_tie_effective  : stage schedule used to enable tie-break
  * ---------------------------------------------------------- */
 static void bitonic_sort_msb3_tiebreak_last2(
     uint32_t *mag_q,
     uint32_t *ind_order,
-    uint64_t  n_effective,
+    uint64_t  n_sort_effective,
+    uint64_t  n_tie_effective,
     const int B_MAG,
     const int MSB_NUM,
     const int LSB_NUM
 )
 {
-    for (uint64_t w = 2; w <= n_effective; w <<= 1) {
-        int use_tiebreak = (w >= (n_effective >> 1)); /* last 2 stages */
+    for (uint64_t w = 2; w <= n_sort_effective; w <<= 1) {
+
+        /* Tie-break schedule anchored to n_tie_effective */
+        int use_tiebreak = (w >= (n_tie_effective >> 1));
 
         for (uint64_t j = w >> 1; j > 0; j >>= 1) {
-            for (uint64_t i = 0; i < n_effective; i++) {
+            for (uint64_t i = 0; i < n_sort_effective; i++) {
                 uint64_t l = i ^ j;
                 if (l <= i) continue;
 
@@ -202,22 +220,22 @@ static void sorter_mex_core(
     const double *y_soft,
     uint64_t      n,
     uint32_t      mode,
+    uint64_t      n_sort_effective,
+    uint64_t      n_tie_effective,
     uint32_t     *sorted_idx_out
 )
 {
     const double LLR_max = 31.0;
     const int    B_MAG   = 5;
 
-    uint64_t n_effective = next_pow2_u64(n);
-
-    uint32_t *ind_order = (uint32_t *)calloc((size_t)n_effective, sizeof(uint32_t));
+    uint32_t *ind_order = (uint32_t *)calloc((size_t)n_sort_effective, sizeof(uint32_t));
     if (ind_order == NULL) {
         mexErrMsgTxt("Memory allocation failed.");
     }
 
     /* ---------------- true-valued reference ---------------- */
     if (mode == 0) {
-        double *reliability = (double *)calloc((size_t)n_effective, sizeof(double));
+        double *reliability = (double *)calloc((size_t)n_sort_effective, sizeof(double));
         if (reliability == NULL) {
             free(ind_order);
             mexErrMsgTxt("Memory allocation failed.");
@@ -228,18 +246,18 @@ static void sorter_mex_core(
             ind_order[i]   = (uint32_t)i;
         }
 
-        for (uint64_t i = n; i < n_effective; i++) {
-            reliability[i] = 31.0; /* same padding style as your ORBGRAND code */
+        for (uint64_t i = n; i < n_sort_effective; i++) {
+            reliability[i] = DBL_MAX;
             ind_order[i]   = (uint32_t)i;
         }
 
-        bitonic_sort_double(reliability, ind_order, n_effective);
+        bitonic_sort_double(reliability, ind_order, n_sort_effective);
         free(reliability);
     }
 
     /* ---------------- quantized family ---------------- */
     else {
-        uint32_t *mag_q_full = (uint32_t *)calloc((size_t)n_effective, sizeof(uint32_t));
+        uint32_t *mag_q_full = (uint32_t *)calloc((size_t)n_sort_effective, sizeof(uint32_t));
         if (mag_q_full == NULL) {
             free(ind_order);
             mexErrMsgTxt("Memory allocation failed.");
@@ -252,32 +270,34 @@ static void sorter_mex_core(
             ind_order[i]  = (uint32_t)i;
         }
 
-        for (uint64_t i = n; i < n_effective; i++) {
+        for (uint64_t i = n; i < n_sort_effective; i++) {
             mag_q_full[i] = 31U;
             ind_order[i]  = (uint32_t)i;
         }
 
         if (mode >= 1 && mode <= 4) {
-            uint8_t *sort_key = (uint8_t *)calloc((size_t)n_effective, sizeof(uint8_t));
+            uint8_t *sort_key = (uint8_t *)calloc((size_t)n_sort_effective, sizeof(uint8_t));
             if (sort_key == NULL) {
                 free(mag_q_full);
                 free(ind_order);
                 mexErrMsgTxt("Memory allocation failed.");
             }
 
-            for (uint64_t i = 0; i < n_effective; i++) {
+            for (uint64_t i = 0; i < n_sort_effective; i++) {
                 sort_key[i] = build_sort_key((uint8_t)mag_q_full[i], mode);
             }
 
-            bitonic_sort_indices_u8(sort_key, ind_order, n_effective);
+            bitonic_sort_indices_u8(sort_key, ind_order, n_sort_effective);
             free(sort_key);
         }
         else if (mode == 5) {
-            bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order, n_effective,
+            bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order,
+                                             n_sort_effective, n_tie_effective,
                                              B_MAG, 3, 1); /* PA1 */
         }
         else if (mode == 6) {
-            bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order, n_effective,
+            bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order,
+                                             n_sort_effective, n_tie_effective,
                                              B_MAG, 3, 2); /* PA2 */
         }
         else {
@@ -301,11 +321,18 @@ static void sorter_mex_core(
  *
  * MATLAB usage:
  *   sorted_idx = sorter_quantized_mex(y_soft, mode)
+ *   sorted_idx = sorter_quantized_mex(y_soft, mode, n_sort_effective_forced)
+ *   sorted_idx = sorter_quantized_mex(y_soft, mode, n_sort_effective_forced, n_tie_effective_forced)
+ *
+ * Examples:
+ *   sorter_quantized_mex(y_soft, 5)              -> native behavior
+ *   sorter_quantized_mex(y_soft, 5, 256, 256)    -> full 128->256 mapping
+ *   sorter_quantized_mex(y_soft, 5, 128, 256)    -> hybrid: native sort, 256 tie schedule
  * ---------------------------------------------------------- */
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-    if (nrhs != 2) {
-        mexErrMsgTxt("Usage: sorted_idx = sorter_quantized_mex(y_soft, mode)");
+    if (nrhs < 2 || nrhs > 4) {
+        mexErrMsgTxt("Usage: sorted_idx = sorter_quantized_mex(y_soft, mode, [n_sort_effective_forced], [n_tie_effective_forced])");
     }
 
     if (nlhs != 1) {
@@ -333,8 +360,53 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     }
     uint32_t mode = (uint32_t)mode_in;
 
+    /* Default native behavior */
+    uint64_t n_sort_effective = next_pow2_u64(n);
+    uint64_t n_tie_effective  = n_sort_effective;
+
+    if (nrhs >= 3) {
+        if (mxGetNumberOfElements(prhs[2]) != 1) {
+            mexErrMsgTxt("n_sort_effective_forced must be a scalar.");
+        }
+
+        double nsort_in = mxGetScalar(prhs[2]);
+        if (nsort_in < 0 || floor(nsort_in) != nsort_in) {
+            mexErrMsgTxt("n_sort_effective_forced must be a nonnegative integer.");
+        }
+
+        if ((uint64_t)nsort_in != 0) {
+            n_sort_effective = (uint64_t)nsort_in;
+            if (n_sort_effective < n) {
+                mexErrMsgTxt("n_sort_effective_forced must be >= length(y_soft).");
+            }
+            if (!is_pow2_u64(n_sort_effective)) {
+                mexErrMsgTxt("n_sort_effective_forced must be a power of two.");
+            }
+        }
+    }
+
+    if (nrhs == 4) {
+        if (mxGetNumberOfElements(prhs[3]) != 1) {
+            mexErrMsgTxt("n_tie_effective_forced must be a scalar.");
+        }
+
+        double ntie_in = mxGetScalar(prhs[3]);
+        if (ntie_in < 0 || floor(ntie_in) != ntie_in) {
+            mexErrMsgTxt("n_tie_effective_forced must be a nonnegative integer.");
+        }
+
+        if ((uint64_t)ntie_in != 0) {
+            n_tie_effective = (uint64_t)ntie_in;
+            if (!is_pow2_u64(n_tie_effective)) {
+                mexErrMsgTxt("n_tie_effective_forced must be a power of two.");
+            }
+        }
+    } else {
+        n_tie_effective = n_sort_effective;
+    }
+
     plhs[0] = mxCreateNumericMatrix((mwSize)n, 1, mxUINT32_CLASS, mxREAL);
     uint32_t *sorted_idx = (uint32_t *)mxGetData(plhs[0]);
 
-    sorter_mex_core(y_soft, n, mode, sorted_idx);
+    sorter_mex_core(y_soft, n, mode, n_sort_effective, n_tie_effective, sorted_idx);
 }
