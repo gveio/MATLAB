@@ -132,7 +132,13 @@ static inline uint32_t msb_key(uint32_t x, const int MSB_NUM, const int B_MAG)
 
 static inline uint32_t lsb_key(uint32_t x, const int LSB_NUM)
 {
-    return x & ((1u << LSB_NUM) - 1u);
+    if (LSB_NUM == 1) {
+        /* PA1: use bit 1 (the next bit below MSB3) */
+        return (x >> 1) & 0x1u;
+    } else {
+        /* PA2: use bits [1:0] */
+        return x & 0x3u;
+    }
 }
 
 static inline int key_gt(uint32_t a, uint32_t b, int use_tiebreak,

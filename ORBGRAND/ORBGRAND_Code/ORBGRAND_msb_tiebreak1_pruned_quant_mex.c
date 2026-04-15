@@ -71,7 +71,7 @@ static inline uint32_t msb_key(uint32_t x, const int MSB_NUM, const int B_MAG) {
 }
 
 static inline uint32_t lsb_key(uint32_t x, const int LSB_NUM) {
-    return x & ((1u << LSB_NUM) - 1u);
+    return (x >> 1) & 0x1u;
 }
 
 // returns 1 if (a > b) in lexicographic order (primary, secondary)

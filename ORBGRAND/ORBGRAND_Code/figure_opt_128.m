@@ -20,7 +20,7 @@ code.LT = '-^';
 code.color = 'b';
 codes(n_CODES).code = code; 
 
-DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
+DECODER = 'ORBGRAND-MSB3-TIEBREAK1';
 
 code.class = 'CAPOLAR';
 n_CODES=n_CODES+1;
