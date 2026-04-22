@@ -11,6 +11,8 @@
  *                            4 -> MSB4
  *                            5 -> PA1 = MSB3 + LSB1 tie-break in final stages
  *                            6 -> PA2 = MSB3 + LSB2 tie-break in final stages
+ *                            7 -> PA1_pruned = PA1 + stronger final-stage pruning
+ *                            8 -> PA2_pruned = PA2 + stronger final-stage pruning
  *   n_sort_effective_forced: optional scalar
  *                            0 or omitted -> use next_pow2(n)
  *                            e.g. 256     -> force sorting network length to 256
@@ -81,9 +83,9 @@ static uint8_t build_sort_key(uint8_t mag_q, uint32_t mode)
 {
     switch (mode) {
         case 1: return mag_q;                  /* baseline full 5-bit */
-        case 2: return (uint8_t)(mag_q >> 3);  /* MSB2 */
-        case 3: return (uint8_t)(mag_q >> 2);  /* MSB3 */
-        case 4: return (uint8_t)(mag_q >> 1);  /* MSB4 */
+        case 2: return (uint8_t)(mag_q >> 3); /* MSB2 */
+        case 3: return (uint8_t)(mag_q >> 2); /* MSB3 */
+        case 4: return (uint8_t)(mag_q >> 1); /* MSB4 */
         default:
             mexErrMsgTxt("Invalid mode for build_sort_key.");
             return 0;
@@ -149,9 +151,7 @@ static inline int key_gt(uint32_t a, uint32_t b, int use_tiebreak,
     if (ap != bp) return (ap > bp);
 
     if (!use_tiebreak) return 0;
-    uint32_t as = lsb_key(a, LSB_NUM);
-    uint32_t bs = lsb_key(b, LSB_NUM);
-    return (as > bs);
+    return (lsb_key(a, LSB_NUM) > lsb_key(b, LSB_NUM));
 }
 
 static inline int key_lt(uint32_t a, uint32_t b, int use_tiebreak,
@@ -162,9 +162,28 @@ static inline int key_lt(uint32_t a, uint32_t b, int use_tiebreak,
     if (ap != bp) return (ap < bp);
 
     if (!use_tiebreak) return 0;
-    uint32_t as = lsb_key(a, LSB_NUM);
-    uint32_t bs = lsb_key(b, LSB_NUM);
-    return (as < bs);
+    return (lsb_key(a, LSB_NUM) < lsb_key(b, LSB_NUM));
+}
+
+/* ----------------------------------------------------------
+ * Stronger safe pruning only in the final stage
+ *
+ * Valid only for n_sort_effective = 256 and LW_MAX = 104
+ * (which is exactly your hardware target / study case).
+ * ---------------------------------------------------------- */
+static inline int prune_final_stage_pair(uint64_t w, uint64_t j, uint64_t i,
+                                         uint64_t n_sort_effective)
+{
+    (void)n_sort_effective; /* only 256 case is used in study */
+
+    if (w != 256) return 0; /* only prune final stage */
+
+    if (j == 128) return 0;          /* no pruning */
+    if (j == 64 || j == 32 || j == 16) return (i >= 128);
+    if (j == 8)  return (i >= 112);
+    if (j == 4 || j == 2 || j == 1) return (i >= 104);
+
+    return 0;
 }
 
 /* ----------------------------------------------------------
@@ -172,6 +191,7 @@ static inline int key_lt(uint32_t a, uint32_t b, int use_tiebreak,
  *
  * n_sort_effective : active sorting network size
  * n_tie_effective  : stage schedule used to enable tie-break
+ * do_prune_final   : enable stronger safe pruning in final stage
  * ---------------------------------------------------------- */
 static void bitonic_sort_msb3_tiebreak_last2(
     uint32_t *mag_q,
@@ -180,7 +200,8 @@ static void bitonic_sort_msb3_tiebreak_last2(
     uint64_t  n_tie_effective,
     const int B_MAG,
     const int MSB_NUM,
-    const int LSB_NUM
+    const int LSB_NUM,
+    int        do_prune_final
 )
 {
     for (uint64_t w = 2; w <= n_sort_effective; w <<= 1) {
@@ -192,6 +213,10 @@ static void bitonic_sort_msb3_tiebreak_last2(
             for (uint64_t i = 0; i < n_sort_effective; i++) {
                 uint64_t l = i ^ j;
                 if (l <= i) continue;
+
+                if (do_prune_final && prune_final_stage_pair(w, j, i, n_sort_effective)) {
+                    continue;
+                }
 
                 int asc = ((i & w) == 0);
                 int do_swap = 0;
@@ -299,17 +324,27 @@ static void sorter_mex_core(
         else if (mode == 5) {
             bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order,
                                              n_sort_effective, n_tie_effective,
-                                             B_MAG, 3, 1); /* PA1 */
+                                             B_MAG, 3, 1, 0); /* PA1 */
         }
         else if (mode == 6) {
             bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order,
                                              n_sort_effective, n_tie_effective,
-                                             B_MAG, 3, 2); /* PA2 */
+                                             B_MAG, 3, 2, 0); /* PA2 */
+        }
+        else if (mode == 7) {
+            bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order,
+                                             n_sort_effective, n_tie_effective,
+                                             B_MAG, 3, 1, 1); /* PA1_pruned */
+        }
+        else if (mode == 8) {
+            bitonic_sort_msb3_tiebreak_last2(mag_q_full, ind_order,
+                                             n_sort_effective, n_tie_effective,
+                                             B_MAG, 3, 2, 1); /* PA2_pruned */
         }
         else {
             free(mag_q_full);
             free(ind_order);
-            mexErrMsgTxt("Invalid mode. Use 0..6.");
+            mexErrMsgTxt("Invalid mode. Use 0..8.");
         }
 
         free(mag_q_full);
@@ -324,16 +359,6 @@ static void sorter_mex_core(
 
 /* ----------------------------------------------------------
  * MEX interface
- *
- * MATLAB usage:
- *   sorted_idx = sorter_quantized_mex(y_soft, mode)
- *   sorted_idx = sorter_quantized_mex(y_soft, mode, n_sort_effective_forced)
- *   sorted_idx = sorter_quantized_mex(y_soft, mode, n_sort_effective_forced, n_tie_effective_forced)
- *
- * Examples:
- *   sorter_quantized_mex(y_soft, 5)              -> native behavior
- *   sorter_quantized_mex(y_soft, 5, 256, 256)    -> full 128->256 mapping
- *   sorter_quantized_mex(y_soft, 5, 128, 256)    -> hybrid: native sort, 256 tie schedule
  * ---------------------------------------------------------- */
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
@@ -361,8 +386,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     const double *y_soft = mxGetPr(prhs[0]);
 
     double mode_in = mxGetScalar(prhs[1]);
-    if (mode_in < 0 || mode_in > 6 || floor(mode_in) != mode_in) {
-        mexErrMsgTxt("mode must be one of {0,1,2,3,4,5,6}.");
+    if (mode_in < 0 || mode_in > 8 || floor(mode_in) != mode_in) {
+        mexErrMsgTxt("mode must be one of {0,1,2,3,4,5,6,7,8}.");
     }
     uint32_t mode = (uint32_t)mode_in;
 
