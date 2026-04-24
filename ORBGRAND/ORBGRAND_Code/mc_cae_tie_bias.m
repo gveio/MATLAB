@@ -111,7 +111,7 @@ save('CAE_TIE_BIAS.mat','result');
 %% PLOTTING
 %% ==========================================================
 
-ii = 3; % choose SNR index (e.g. 6 dB)
+ii = 4; % choose SNR index (e.g. 6 dB)
 
 %% 1) Swap probability heatmap
 figure; clf;
