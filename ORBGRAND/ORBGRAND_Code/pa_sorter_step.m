@@ -29,7 +29,7 @@ clear; clc;
 
 %% User options
 code_class = 'CRC';     % 'CAPOLAR' or 'CRC'
-ebn0       = 4:1:7;     % Eb/N0 sweep
+ebn0       = 7;     % Eb/N0 sweep
 nFrames    = 2e4;       % Monte Carlo frames per SNR
 
 %% Modulation: BPSK only
