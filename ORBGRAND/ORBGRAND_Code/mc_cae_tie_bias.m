@@ -11,7 +11,7 @@
 clear; clc;
 
 %% User options
-code_class = 'CRC';     % 'CAPOLAR' or 'CRC'
+code_class = 'LDPC';     % 'CAPOLAR' or 'CRC'
 ebn0       = 7;
 nFrames    = 3e4;
 
@@ -33,6 +33,12 @@ switch upper(code_class)
         poly = koopman2matlab(hex_poly);
         [G,H,n] = make_CRC_GH(k,poly);
         code_label = ['CRC_' hex_poly];
+
+    case 'LDPC'
+        S = open('ldpc_1024_512.mat');
+        G = S.G; H = S.H;
+        [k,n] = size(G);
+        code_label = 'LDPC';
 
     otherwise
         error('Unsupported code_class');

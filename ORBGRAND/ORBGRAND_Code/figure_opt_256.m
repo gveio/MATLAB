@@ -23,7 +23,7 @@ code.color = 'r';
 codes(n_CODES).code = code; 
 
 
-DECODER = 'ORBGRAND-MSB3-TIE-POLICY';
+DECODER = 'ORBGRAND-MSB3-TIE-PERT';
 
 code.class = 'CRC';
 poly='0xd175';
