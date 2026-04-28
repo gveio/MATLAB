@@ -83,22 +83,21 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
         outer_stage++;
 
         for (j = w / 2; j > 0; j /= 2) {
-
-            /* last stage only */
-            int is_last_stage = (outer_stage == m_bits);
-            /* last two stages */
-            int in_last_two_outer_stages = (outer_stage >= (m_bits - 1));
-
             /*
-             * Policy selector.
+             * Useful-region fixed swap based on PA2 useful-swap diagnostics.
              *
-             * Change this line to test different distance policies:
-             *
-             * j == 1              -> only distance 1
-             * j <= 2              -> distances 2 and 1
-             * j <= 4              -> distances 4, 2, and 1
+             * For n=256:
+             * outer 8, d=16  -> step 32
+             * outer 8, d=32  -> step 31
+             * outer 7, d=8   -> step 25
+             * outer 7, d=16  -> step 24
              */
-             int fixed_swap_tie_region = in_last_two_outer_stages && (j <= 8);
+/*
+ * Broader useful-region fixed swap.
+ */
+int fixed_swap_tie_region =
+       (outer_stage == m_bits     && (j == 8 || j == 16 || j == 32))
+    || (outer_stage == m_bits - 1 && (j == 8 || j == 16));
             
             for (i = 0; i < n; i++) {
 
@@ -120,7 +119,7 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
                         /*
                          * MSB tie.
                          * Baseline MSB3 would keep.
-                         * This experiment forces swap for selected small-distance CAEs.
+                         * This experiment forces swap for selected CAEs.
                          */
                         if (fixed_swap_tie_region) {
                             do_swap = 1;
