@@ -11,7 +11,7 @@
 clear; clc;
 
 %% User options
-code_class = 'LDPC';     % 'CAPOLAR' or 'CRC'
+code_class = 'CRC';     % 'CAPOLAR' or 'CRC'
 ebn0       = 7;
 nFrames    = 3e4;
 

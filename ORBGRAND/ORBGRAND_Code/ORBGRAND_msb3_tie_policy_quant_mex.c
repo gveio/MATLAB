@@ -87,7 +87,7 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
             /* last stage only */
             int is_last_stage = (outer_stage == m_bits);
             /* last two stages */
-            //int in_last_two_outer_stages = (outer_stage >= (m_bits - 1));
+            int in_last_two_outer_stages = (outer_stage >= (m_bits - 1));
 
             /*
              * Policy selector.
@@ -98,7 +98,7 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
              * j <= 2              -> distances 2 and 1
              * j <= 4              -> distances 4, 2, and 1
              */
-             int fixed_swap_tie_region = is_last_stage && (j <= 4);
+             int fixed_swap_tie_region = in_last_two_outer_stages && (j <= 8);
             
             for (i = 0; i < n; i++) {
 

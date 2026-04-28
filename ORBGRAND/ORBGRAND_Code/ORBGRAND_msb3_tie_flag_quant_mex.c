@@ -99,21 +99,16 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
 
                             uint32_t h = ind_order[i] ^ (ind_order[l] << 1) ^ (uint32_t)j;
                         
-                            int swap_selected = 0;
+                            int swap_selected;
                         
-                            if (j <= 2) {
-                                swap_selected = ((h & 1) == 0);       // 1/2 = 50%
-                            }
-                            else if (j <= 8) {
-                                swap_selected = ((h & 3) == 0);       // 1/4 = 25%
-                            }
-                            else {
-                                swap_selected = 0;                    // keep
-                            }
+                            swap_selected = ((h & 3) < 3);
                         
                             do_swap = swap_selected ? 1 : 0;
                         }
-                    }
+                       else{
+                            do_swap = 0;
+                       }
+                   }
     
                         if (do_swap) {
                             temp = arr[i];
