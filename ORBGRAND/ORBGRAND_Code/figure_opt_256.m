@@ -10,7 +10,7 @@ k=240;
 n_CODES = 0;
 
 % ORBGRAND
-DECODER = 'ORBGRAND-MSB3-TIE-FLAG';
+DECODER = 'ORBGRAND-MSB-3';
 
 code.class = 'CRC';
 poly='0xd175';

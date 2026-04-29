@@ -47,100 +47,6 @@ uint8_t memb_check(uint8_t *y, uint8_t *H,uint64_t n,uint64_t s){
     return 0;
 }
 
-void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
-    size_t i, j, w, l;
-    uint32_t temp_index;
-    double temp;
-
-    /*
-     * Fixed tie policy for MSB3 sorter:
-     *
-     * arr[] contains only MSB3 magnitudes.
-     *
-     * If arr[i] != arr[l]:
-     *      normal MSB3 compare-swap
-     *
-     * If arr[i] == arr[l]:
-     *      normally MSB3 keeps order.
-     *      Here we force swap only for selected small-distance comparisons.
-     *
-     * Start experiment:
-     *      fixed swap on ties only for distance j = 1
-     *      inside the last two outer bitonic stages.
-     */
-
-    uint64_t m_bits = 0;
-    uint64_t tmp_n = n;
-    while (tmp_n > 1) {
-        m_bits++;
-        tmp_n >>= 1;
-    }
-
-    uint64_t outer_stage = 0;
-
-    for (w = 2; w <= n; w *= 2) {
-
-        outer_stage++;
-
-        for (j = w / 2; j > 0; j /= 2) {
-            /*
-             * Useful-region fixed swap based on PA2 useful-swap diagnostics.
-             *
-             * For n=256:
-             * outer 8, d=16  -> step 32
-             * outer 8, d=32  -> step 31
-             * outer 7, d=8   -> step 25
-             * outer 7, d=16  -> step 24
-             */
-            /*
-             * Broader useful-region fixed swap.
-             */
-            int fixed_swap_tie_region =
-                   (outer_stage == m_bits     && (j == 16))
-                || (outer_stage == m_bits - 1 && (j == 8));
-            
-            for (i = 0; i < n; i++) {
-
-                l = i ^ j;
-
-                if (l > i) {
-
-                    int ascending = ((i & w) == 0);
-
-                    int do_swap = 0;
-
-                    if (arr[i] > arr[l]) {
-                        do_swap = ascending ? 1 : 0;
-                    }
-                    else if (arr[i] < arr[l]) {
-                        do_swap = ascending ? 0 : 1;
-                    }
-                    else {
-                        /*
-                         * MSB tie.
-                         * Baseline MSB3 would keep.
-                         * This experiment forces swap for selected CAEs.
-                         */
-                        if (fixed_swap_tie_region) {
-                            do_swap = 1;
-                        }
-                    }
-
-                    if (do_swap) {
-                        temp = arr[i];
-                        arr[i] = arr[l];
-                        arr[l] = temp;
-
-                        temp_index = ind_order[i];
-                        ind_order[i] = ind_order[l];
-                        ind_order[l] = temp_index;
-                    }
-                }
-            }
-        }
-    }
-}
-
 void mountain_build(int32_t *u, int32_t kk, int32_t w, int32_t W1, int32_t n1){
     size_t i;
     uint64_t W2,q,r;
@@ -160,6 +66,92 @@ void mountain_build(int32_t *u, int32_t kk, int32_t w, int32_t W1, int32_t n1){
         u[w-q-1] = u[w-q-1] + r;
 }
 
+static inline uint32_t msb_key(uint32_t x, const int MSB_NUM, const int B_MAG) {
+    return x >> (B_MAG - MSB_NUM);
+}
+
+static inline uint32_t lsb_key(uint32_t x, const int LSB_NUM) {
+    return (x >> 1) & 0x1u;
+}
+
+// returns 1 if (a > b) in lexicographic order (primary, secondary)
+static inline int key_gt(uint32_t a, uint32_t b, int use_tiebreak, const int MSB_NUM, const int LSB_NUM, const int B_MAG)
+{
+    uint32_t ap = msb_key(a, MSB_NUM, B_MAG);
+    uint32_t bp = msb_key(b, MSB_NUM, B_MAG);
+    if (ap != bp) return (ap > bp);
+
+    if (!use_tiebreak) return 0; // equal in MSB-space → do not force swap
+    uint32_t as = lsb_key(a, LSB_NUM);
+    uint32_t bs = lsb_key(b, LSB_NUM);
+    return (as > bs);
+}
+
+// returns 1 if (a < b) in lexicographic order (primary, secondary)
+static inline int key_lt(uint32_t a, uint32_t b, int use_tiebreak,
+                         const int MSB_NUM, const int LSB_NUM, const int B_MAG)
+{
+    uint32_t ap = msb_key(a, MSB_NUM, B_MAG);
+    uint32_t bp = msb_key(b, MSB_NUM, B_MAG);
+    if (ap != bp) return (ap < bp);
+
+    if (!use_tiebreak) return 0;
+    uint32_t as = lsb_key(a, LSB_NUM);
+    uint32_t bs = lsb_key(b, LSB_NUM);
+    return (as < bs);
+}
+
+/**
+ * Mixed precision in stages:
+ * - Always: MSB_NUM (e.g., 3) is used as primary sort key.
+ * - Last 2 stages (w >= n/2): add LSB_NUM (e.g., 2) tie-break.
+ */
+void bitonic_sort_msb3_tiebreak_last2(uint32_t *mag_q,
+                                      uint32_t *ind_order,
+                                      uint64_t n,
+                                      const int B_MAG,
+                                      const int MSB_NUM,
+                                      const int LSB_NUM)
+{
+
+    for (uint64_t w = 2; w <= n; w <<= 1) {
+
+        for (uint64_t j = (w >> 1); j > 0; j >>= 1) {
+
+             int use_tiebreak = (w == n && (j == 8 || j == 16 || j == 32)) || (w == n/2  && (j == 8 || j == 16));
+            
+            for (uint64_t i = 0; i < n; i++) {
+
+                uint64_t l = i ^ j;
+                if (l <= i) continue;
+
+                    int asc = ((i & w) == 0);
+
+                    int do_swap = 0;
+                    if (asc) {
+                        // ascending: swap if key(i) > key(l)
+                        do_swap = key_gt(mag_q[i], mag_q[l], use_tiebreak,
+                                         MSB_NUM, LSB_NUM, B_MAG);
+                    } else {
+                        // descending: swap if key(i) < key(l)
+                        do_swap = key_lt(mag_q[i], mag_q[l], use_tiebreak,
+                                         MSB_NUM, LSB_NUM, B_MAG);
+                    }
+
+                    if (do_swap) {
+                        uint32_t tmp_mag = mag_q[i];
+                        mag_q[i] = mag_q[l];
+                        mag_q[l] = tmp_mag;
+
+                        uint32_t tmp_idx = ind_order[i];
+                        ind_order[i] = ind_order[l];
+                        ind_order[l] = tmp_idx;
+                    }
+            }
+        }
+    }
+}
+
 void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint64_t n,uint64_t s,uint64_t n_guesses_max){
 
     size_t i,j,decoded=0,sy;
@@ -173,16 +165,14 @@ void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint
     const int B = 6;
     const int B_mag = B - 1;
     const int MSB_NUM = 3; // number of MSBs to extract
-
-    uint64_t msb_shift = B_mag - MSB_NUM;
-    uint64_t pad_val   = (1ULL << MSB_NUM) - 1;
+    const int LSB_NUM = 1; // number of LSBs to use as tie-break
 
     // round n up to next power of two
     uint64_t n_effective = 1;
     while (n_effective < n) n_effective *= 2;
 
     // allocate arrays of size n_effective
-    double *LLR_mag_q = (double *)calloc(n_effective, sizeof(double));
+    uint32_t *LLR_mag_q = (uint32_t *)calloc(n_effective, sizeof(uint32_t));
     uint32_t *sorted_list_q = (uint32_t *)calloc(n_effective, sizeof(uint32_t));
 
     /*variables for pattern generator*/
@@ -217,20 +207,12 @@ void ORBGRAND(double *y_decoded,double *n_guesses,double *y_soft,uint8_t *H,uint
         LLR_mag_q[i] = round(fabs(L) / LLR_max * (pow(2, B_mag) - 1));
         sorted_list_q[i] = i;
     }
-
-    // Extract MSBs
-    for (uint64_t i = 0; i < n; i++) {
-        uint64_t tmp = (uint64_t)LLR_mag_q[i];
-        tmp >>= msb_shift;
-        LLR_mag_q[i] = (double)tmp;
-    }
-    // Pad remaining entries
     for (uint64_t i = n; i < n_effective; i++) {
-        LLR_mag_q[i] = pad_val;
+        LLR_mag_q[i] = pow(2, B_mag) - 1; // pad = 31
         sorted_list_q[i] = i;
     }
 
-    bitonic_sort(LLR_mag_q, sorted_list_q, n_effective);
+   bitonic_sort_msb3_tiebreak_last2(LLR_mag_q, sorted_list_q, n_effective,B_mag, MSB_NUM, LSB_NUM);
 
     while(n_guesses[0]<n_guesses_max){
         W++; /*Increment logistic weight*/
