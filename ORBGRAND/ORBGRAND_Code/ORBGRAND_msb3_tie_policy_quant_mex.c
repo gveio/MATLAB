@@ -96,8 +96,8 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
              * Broader useful-region fixed swap.
              */
             int fixed_swap_tie_region =
-                   (outer_stage == m_bits     && (j == 16))
-                || (outer_stage == m_bits - 1 && (j == 8));
+                   (outer_stage == m_bits     && (j == 8 || j == 16 || j == 32))
+                || (outer_stage == m_bits - 1 && (j == 8 || j == 16));
             
             for (i = 0; i < n; i++) {
 

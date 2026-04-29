@@ -69,15 +69,9 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
 
         for (j = w / 2; j > 0; j /= 2) {
 
-            /* choose region */
-            int in_last_stage = (outer_stage == m_bits);
-            int in_last_two_stages = (outer_stage >= (m_bits - 1));
-
-            /*
-             * Main experiment:
-             * last two stages, distances <= DIST_THR
-             */
-            int tie_flag_region = in_last_two_stages && (j <= DIST_THR);
+            int tie_flag_region =
+                   (outer_stage == m_bits     && (j == 8 || j == 16 || j == 32))
+                || (outer_stage == m_bits - 1 && (j == 8 || j == 16));
 
             for (i = 0; i < n; i++) {
 
@@ -101,7 +95,7 @@ void bitonic_sort(double *arr, uint32_t *ind_order, uint64_t n) {
                         
                             int swap_selected;
                         
-                            swap_selected = ((h & 3) < 3);
+                            swap_selected = (h & 1);
                         
                             do_swap = swap_selected ? 1 : 0;
                         }
