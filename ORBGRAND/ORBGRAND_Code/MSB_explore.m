@@ -100,8 +100,9 @@ function make_fig(codes,fig_no)
     xlim(XLIM_ZOOM);
     ylim(YLIM_ZOOM);
     xticks(4:7);
-    yticks([1e-5 1e-4 1e-3 1e-2 1e-1 1]);
-    yticklabels({'10e-5','10^{-4}','10^{-3}','10^{-2}','10^{-1}','10^{0}'});
+    yticks([1e-5 1e-4 1e-3 1e-2 1e-1 1e0]);
+    yticklabels({'$10^{-5}$','$10^{-4}$','$10^{-3}$','$10^{-2}$','$10^{-1}$','$10^{0}$'});
+    ax.TickLabelInterpreter = 'latex';
 
     xlabel('$E_b/N_0$ (dB)','FontSize',FONT);
     ylabel('$\mathrm{FER}$','FontSize',FONT);
