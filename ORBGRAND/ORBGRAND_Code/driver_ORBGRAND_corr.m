@@ -50,9 +50,9 @@ max_query = Inf;
 
 %% Monte Carlo parameters
 ebn0 = 4:0.5:7;
-err_thresh = 50;
+err_thresh = 20;
 
-rho_list = [0 0.5 0.9 -0.9];
+rho_list = [0 0.5 0.8];
 
 snr_db = ebn0 + 10*log10(R) + 10*log10(nmodbits);
 

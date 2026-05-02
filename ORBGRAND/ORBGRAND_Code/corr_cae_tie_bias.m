@@ -1,15 +1,18 @@
 % ==========================================================
-% AR(1) correlated-noise sweep for MSB3-tie full-precision behavior
+% AR(1) correlated-noise sweep for MSB3 sorter swap behavior
 %
 % Measures:
-%   P(full swap | MSB3 tie)
-%   P(full keep | MSB3 tie)
+%   1) P(full swap | MSB3 tie)
+%   2) P(full keep | MSB3 tie)
+%   3) P(actual MSB3 sorter swap) per comparison
 %
-% Also includes AWGN-style diagnostics for a selected rho:
-%   1) Heatmap of P(full swap | MSB3 tie)
-%   2) Step/distance probability summary
-%   3) Last-stage distance contribution
-%   4) CAE concentration curve
+% Requires updated MEX with 5 outputs:
+%   [sorted_idx, tie_count, total_count, tie_swap_count, swap_count] = ...
+%       corr_cae_tie_bias_mex(y_soft)
+%
+% Important:
+%   swap_count = actual swaps performed by MSB3-only sorter
+%   tie_swap_count = full-precision swaps only inside MSB3 ties
 % ==========================================================
 
 clear; clc;
@@ -21,7 +24,7 @@ nFrames    = 3e4;
 
 rho_list = [0 0.3 0.5 0.7 0.9 -0.3 -0.5 -0.7 -0.9];
 
-rho_plot = 0.9;         % rho used for AWGN-style diagnostic plots
+rho_plot = 0.9;         % rho used for detailed diagnostic plots
 
 modulation = 'BPSK';
 nmodbits   = 1;
@@ -92,18 +95,22 @@ fprintf('Last two stages: steps %d to %d\n', last2_steps(1), last2_steps(end));
 %% Results
 nrho = length(rho_list);
 
-P_tie_region            = zeros(nrho,1);
-P_swap_given_tie_region = zeros(nrho,1);
-P_keep_given_tie_region = zeros(nrho,1);
-P_tie_and_swap_region   = zeros(nrho,1);
+P_tie_region                 = zeros(nrho,1);
+P_full_swap_given_tie_region = zeros(nrho,1);
+P_full_keep_given_tie_region = zeros(nrho,1);
+P_tie_and_full_swap_region   = zeros(nrho,1);
 
-P_swap_step = nan(n_steps,nrho);
-P_tie_step  = zeros(n_steps,nrho);
+P_actual_swap_region         = zeros(nrho,1);
 
-%% Full per-CAE storage for AWGN-style diagnostics
+P_full_swap_given_tie_step   = nan(n_steps,nrho);
+P_tie_step                   = zeros(n_steps,nrho);
+P_actual_swap_step           = zeros(n_steps,nrho);
+
+%% Full per-CAE storage for diagnostics
 tie_sum_all      = zeros(n_steps,n_cae,nrho);
 total_sum_all    = zeros(n_steps,n_cae,nrho);
 tie_swap_sum_all = zeros(n_steps,n_cae,nrho);
+swap_sum_all     = zeros(n_steps,n_cae,nrho);
 
 %% Main sweep
 for rid = 1:nrho
@@ -117,6 +124,7 @@ for rid = 1:nrho
     tie_sum      = zeros(n_steps,n_cae);
     total_sum    = zeros(n_steps,n_cae);
     tie_swap_sum = zeros(n_steps,n_cae);
+    swap_sum     = zeros(n_steps,n_cae);
 
     for frm = 1:nFrames
 
@@ -152,65 +160,76 @@ for rid = 1:nrho
         y_soft = y_soft(1:n).';
 
         %% MEX diagnostic
-        [~, tie_c, total_c, tie_swap_c] = pa_cae_tie_bias_mex(y_soft);
+        [~, tie_c, total_c, tie_swap_c, swap_c] = corr_cae_tie_bias_mex(y_soft);
 
         tie_sum      = tie_sum      + double(tie_c);
         total_sum    = total_sum    + double(total_c);
         tie_swap_sum = tie_swap_sum + double(tie_swap_c);
+        swap_sum     = swap_sum     + double(swap_c);
     end
 
     %% Store full per-CAE counters
     tie_sum_all(:,:,rid)      = tie_sum;
     total_sum_all(:,:,rid)    = total_sum;
     tie_swap_sum_all(:,:,rid) = tie_swap_sum;
+    swap_sum_all(:,:,rid)     = swap_sum;
 
     %% Region-level summary: last two stages
-    total_ties_region  = sum(tie_sum(last2_steps,:),'all');
-    total_swaps_region = sum(tie_swap_sum(last2_steps,:),'all');
-    total_comp_region  = sum(total_sum(last2_steps,:),'all');
+    total_ties_region         = sum(tie_sum(last2_steps,:),'all');
+    total_full_swaps_region   = sum(tie_swap_sum(last2_steps,:),'all');
+    total_actual_swaps_region = sum(swap_sum(last2_steps,:),'all');
+    total_comp_region         = sum(total_sum(last2_steps,:),'all');
 
-    P_tie_region(rid)            = total_ties_region / total_comp_region;
-    P_swap_given_tie_region(rid) = total_swaps_region / total_ties_region;
-    P_keep_given_tie_region(rid) = 1 - P_swap_given_tie_region(rid);
-    P_tie_and_swap_region(rid)   = total_swaps_region / total_comp_region;
+    P_tie_region(rid)                 = total_ties_region / total_comp_region;
+    P_full_swap_given_tie_region(rid) = total_full_swaps_region / total_ties_region;
+    P_full_keep_given_tie_region(rid) = 1 - P_full_swap_given_tie_region(rid);
+    P_tie_and_full_swap_region(rid)   = total_full_swaps_region / total_comp_region;
+
+    P_actual_swap_region(rid)         = total_actual_swaps_region / total_comp_region;
 
     %% Step-level summary
     for st = 1:n_steps
-        total_ties_st  = sum(tie_sum(st,:),'all');
-        total_swaps_st = sum(tie_swap_sum(st,:),'all');
-        total_comp_st  = sum(total_sum(st,:),'all');
+        total_ties_st         = sum(tie_sum(st,:),'all');
+        total_full_swaps_st   = sum(tie_swap_sum(st,:),'all');
+        total_actual_swaps_st = sum(swap_sum(st,:),'all');
+        total_comp_st         = sum(total_sum(st,:),'all');
 
         P_tie_step(st,rid) = total_ties_st / total_comp_st;
+        P_actual_swap_step(st,rid) = total_actual_swaps_st / total_comp_st;
 
         if total_ties_st > 0
-            P_swap_step(st,rid) = total_swaps_st / total_ties_st;
+            P_full_swap_given_tie_step(st,rid) = total_full_swaps_st / total_ties_st;
         end
     end
 
     fprintf('\nrho = %.2f summary, last two stages:\n', rho);
-    fprintf('P(tie)                  = %.4f\n', P_tie_region(rid));
-    fprintf('P(full swap | MSB tie)  = %.4f\n', P_swap_given_tie_region(rid));
-    fprintf('P(full keep | MSB tie)  = %.4f\n', P_keep_given_tie_region(rid));
-    fprintf('P(tie and full swap)    = %.4f\n', P_tie_and_swap_region(rid));
+    fprintf('P(tie)                         = %.4f\n', P_tie_region(rid));
+    fprintf('P(full swap | MSB tie)         = %.4f\n', P_full_swap_given_tie_region(rid));
+    fprintf('P(full keep | MSB tie)         = %.4f\n', P_full_keep_given_tie_region(rid));
+    fprintf('P(tie and full swap)           = %.4f\n', P_tie_and_full_swap_region(rid));
+    fprintf('P(actual MSB3 sorter swap)     = %.4f\n', P_actual_swap_region(rid));
 end
 
 %% Summary table
 Summary = table( ...
     rho_list(:), ...
     P_tie_region, ...
-    P_swap_given_tie_region, ...
-    P_keep_given_tie_region, ...
-    P_tie_and_swap_region, ...
+    P_full_swap_given_tie_region, ...
+    P_full_keep_given_tie_region, ...
+    P_tie_and_full_swap_region, ...
+    P_actual_swap_region, ...
     'VariableNames', ...
     {'rho','P_tie','P_full_swap_given_MSB_tie', ...
-     'P_full_keep_given_MSB_tie','P_tie_and_full_swap'} ...
+     'P_full_keep_given_MSB_tie','P_tie_and_full_swap', ...
+     'P_actual_MSB3_swap'} ...
 );
 
 disp(Summary);
 
-save('AR1_MSB3_TIE_SWAP_SWEEP_WITH_DIAGNOSTICS.mat', ...
-    'Summary', 'P_swap_step', 'P_tie_step', ...
-    'tie_sum_all', 'total_sum_all', 'tie_swap_sum_all', ...
+save('AR1_MSB3_SWAP_SWEEP_WITH_DIAGNOSTICS.mat', ...
+    'Summary', ...
+    'P_full_swap_given_tie_step', 'P_tie_step', 'P_actual_swap_step', ...
+    'tie_sum_all', 'total_sum_all', 'tie_swap_sum_all', 'swap_sum_all', ...
     'rho_list', 'step_outer', 'step_local', 'step_dist', ...
     'last2_steps', 'last_stage_steps', 'code_label', 'ebn0', ...
     'snr_db', 'sigma2');
@@ -219,10 +238,10 @@ save('AR1_MSB3_TIE_SWAP_SWEEP_WITH_DIAGNOSTICS.mat', ...
 %% Sweep plots
 %% ==========================================================
 
-%% Plot 1: swap/keep ratio vs rho
+%% Plot 1: full swap/keep ratio inside MSB ties vs rho
 figure; clf;
-plot(rho_list, P_swap_given_tie_region, '-o', 'LineWidth', 1.5); hold on;
-plot(rho_list, P_keep_given_tie_region, '-s', 'LineWidth', 1.5);
+plot(rho_list, P_full_swap_given_tie_region, '-o', 'LineWidth', 1.5); hold on;
+plot(rho_list, P_full_keep_given_tie_region, '-s', 'LineWidth', 1.5);
 grid on;
 xlabel('$\rho$','Interpreter','latex');
 ylabel('Conditional probability','Interpreter','latex');
@@ -232,10 +251,10 @@ legend({'$P(\mathrm{full\ swap}\mid\mathrm{MSB3\ tie})$', ...
 title(sprintf('MSB3-tie resolution bias, $E_b/N_0=%g$ dB', ebn0), ...
     'Interpreter','latex');
 
-%% Plot 2: tie probability vs rho
+%% Plot 2: tie probability and tie-and-full-swap vs rho
 figure; clf;
 plot(rho_list, P_tie_region, '-o', 'LineWidth', 1.5); hold on;
-plot(rho_list, P_tie_and_swap_region, '-s', 'LineWidth', 1.5);
+plot(rho_list, P_tie_and_full_swap_region, '-s', 'LineWidth', 1.5);
 grid on;
 xlabel('$\rho$','Interpreter','latex');
 ylabel('Probability','Interpreter','latex');
@@ -245,12 +264,21 @@ legend({'$P(\mathrm{MSB3\ tie})$', ...
 title(sprintf('Tie occurrence under AR(1) correlated noise, $E_b/N_0=%g$ dB', ebn0), ...
     'Interpreter','latex');
 
-%% Plot 3: step-level swap-given-tie in last two stages
+%% Plot 3: actual MSB3 sorter swap probability vs rho
+figure; clf;
+plot(rho_list, P_actual_swap_region, '-o', 'LineWidth', 1.5);
+grid on;
+xlabel('$\rho$','Interpreter','latex');
+ylabel('$P(\mathrm{actual\ MSB3\ swap})$','Interpreter','latex');
+title(sprintf('Actual MSB3 sorter swap probability, last two stages, $E_b/N_0=%g$ dB', ebn0), ...
+    'Interpreter','latex');
+
+%% Plot 4: step-level full-swap-given-tie in last two stages
 figure; clf;
 hold on;
 
 for rid = 1:nrho
-    plot(last2_steps, P_swap_step(last2_steps,rid), '-o', ...
+    plot(last2_steps, P_full_swap_given_tie_step(last2_steps,rid), '-o', ...
         'DisplayName', sprintf('\\rho=%.1f', rho_list(rid)));
 end
 
@@ -262,8 +290,44 @@ legend('Location','best');
 title(sprintf('Step-level full-swap probability under MSB3 ties, $E_b/N_0=%g$ dB', ebn0), ...
     'Interpreter','latex');
 
+%% Plot 5: actual swap probability per bitonic step
+figure; clf;
+hold on;
+
+for rid = 1:nrho
+    plot(1:n_steps, P_actual_swap_step(:,rid), '-o', ...
+        'LineWidth', 1.3, ...
+        'DisplayName', sprintf('\\rho=%.1f', rho_list(rid)));
+end
+
+grid on;
+xlabel('Bitonic step','Interpreter','latex');
+ylabel('$P(\mathrm{actual\ Full-precision\ swap})$','Interpreter','latex');
+legend('Location','best');
+title(sprintf('Actual Full-precision sorter swap probability per comparison, $E_b/N_0=%g$ dB', ebn0), ...
+    'Interpreter','latex');
+
+%% Plot 6: early-step actual swap probability
+early_steps = 1:min(10,n_steps);
+
+figure; clf;
+hold on;
+
+for rid = 1:nrho
+    plot(early_steps, P_actual_swap_step(early_steps,rid), '-o', ...
+        'LineWidth', 1.3, ...
+        'DisplayName', sprintf('\\rho=%.1f', rho_list(rid)));
+end
+
+grid on;
+xlabel('Early bitonic step','Interpreter','latex');
+ylabel('$P(\mathrm{actual\ MSB3\ swap})$','Interpreter','latex');
+legend('Location','best');
+title(sprintf('Early-step actual swap probability under AR(1) noise, $E_b/N_0=%g$ dB', ebn0), ...
+    'Interpreter','latex');
+
 %% ==========================================================
-%% AWGN-style diagnostics for selected rho
+%% Detailed diagnostics for selected rho
 %% ==========================================================
 
 [~, rid_plot] = min(abs(rho_list - rho_plot));
@@ -272,78 +336,92 @@ rho_sel = rho_list(rid_plot);
 tie_sum_r      = tie_sum_all(:,:,rid_plot);
 total_sum_r    = total_sum_all(:,:,rid_plot);
 tie_swap_sum_r = tie_swap_sum_all(:,:,rid_plot);
+swap_sum_r     = swap_sum_all(:,:,rid_plot);
 
 p_tie_r = zeros(size(tie_sum_r));
 valid_total = total_sum_r > 0;
 p_tie_r(valid_total) = tie_sum_r(valid_total) ./ total_sum_r(valid_total);
 
-p_swap_given_tie_r = nan(size(tie_sum_r));
+p_full_swap_given_tie_r = nan(size(tie_sum_r));
 valid_tie = tie_sum_r > 0;
-p_swap_given_tie_r(valid_tie) = tie_swap_sum_r(valid_tie) ./ tie_sum_r(valid_tie);
+p_full_swap_given_tie_r(valid_tie) = tie_swap_sum_r(valid_tie) ./ tie_sum_r(valid_tie);
 
-p_tie_and_swap_r = zeros(size(tie_sum_r));
-p_tie_and_swap_r(valid_total) = tie_swap_sum_r(valid_total) ./ total_sum_r(valid_total);
+p_tie_and_full_swap_r = zeros(size(tie_sum_r));
+p_tie_and_full_swap_r(valid_total) = tie_swap_sum_r(valid_total) ./ total_sum_r(valid_total);
+
+p_actual_swap_r = zeros(size(swap_sum_r));
+p_actual_swap_r(valid_total) = swap_sum_r(valid_total) ./ total_sum_r(valid_total);
 
 %% Last-two-stage step summary
 rows = [];
-total_last2_swaps = sum(tie_swap_sum_r(last2_steps,:),'all');
+total_last2_full_swaps   = sum(tie_swap_sum_r(last2_steps,:),'all');
+total_last2_actual_swaps = sum(swap_sum_r(last2_steps,:),'all');
 
 for st = last2_steps
 
-    total_ties_st  = sum(tie_sum_r(st,:),'all');
-    total_swaps_st = sum(tie_swap_sum_r(st,:),'all');
-    total_comp_st  = sum(total_sum_r(st,:),'all');
+    total_ties_st         = sum(tie_sum_r(st,:),'all');
+    total_full_swaps_st   = sum(tie_swap_sum_r(st,:),'all');
+    total_actual_swaps_st = sum(swap_sum_r(st,:),'all');
+    total_comp_st         = sum(total_sum_r(st,:),'all');
 
     P_tie_st = total_ties_st / total_comp_st;
-    P_swap_given_tie_st = total_swaps_st / total_ties_st;
-    P_tie_and_swap_st = total_swaps_st / total_comp_st;
-    frac_last2_swaps_st = total_swaps_st / total_last2_swaps;
+    P_full_swap_given_tie_st = total_full_swaps_st / total_ties_st;
+    P_tie_and_full_swap_st = total_full_swaps_st / total_comp_st;
+    P_actual_swap_st = total_actual_swaps_st / total_comp_st;
+
+    frac_last2_full_swaps_st = total_full_swaps_st / total_last2_full_swaps;
+    frac_last2_actual_swaps_st = total_actual_swaps_st / total_last2_actual_swaps;
 
     rows = [rows; ...
         st, step_outer(st), step_local(st), step_dist(st), ...
-        total_ties_st, total_swaps_st, total_comp_st, ...
-        P_tie_st, P_swap_given_tie_st, P_tie_and_swap_st, ...
-        frac_last2_swaps_st];
+        total_ties_st, total_full_swaps_st, total_actual_swaps_st, total_comp_st, ...
+        P_tie_st, P_full_swap_given_tie_st, P_tie_and_full_swap_st, P_actual_swap_st, ...
+        frac_last2_full_swaps_st, frac_last2_actual_swaps_st];
 end
 
 Last2Summary_r = array2table(rows, ...
     'VariableNames', ...
     {'step','outer_stage','local_step','distance', ...
-     'total_ties','full_swaps','total_comparisons', ...
-     'P_tie','P_full_swap_given_tie','P_tie_and_full_swap', ...
-     'fraction_of_last2_full_swaps'});
+     'total_ties','full_swaps_inside_ties','actual_msb3_swaps','total_comparisons', ...
+     'P_tie','P_full_swap_given_tie','P_tie_and_full_swap','P_actual_MSB3_swap', ...
+     'fraction_of_last2_full_swaps','fraction_of_last2_actual_swaps'});
 
 fprintf('\nLAST-TWO-STAGE SUMMARY FOR rho = %.2f:\n', rho_sel);
 disp(Last2Summary_r);
 
 %% Last-stage distance summary
 rows = [];
-total_last_stage_swaps = sum(tie_swap_sum_r(last_stage_steps,:),'all');
+total_last_stage_full_swaps   = sum(tie_swap_sum_r(last_stage_steps,:),'all');
+total_last_stage_actual_swaps = sum(swap_sum_r(last_stage_steps,:),'all');
 
 for st = last_stage_steps(:)'
 
     d = step_dist(st);
 
-    total_ties_d  = sum(tie_sum_r(st,:),'all');
-    total_swaps_d = sum(tie_swap_sum_r(st,:),'all');
-    total_comp_d  = sum(total_sum_r(st,:),'all');
+    total_ties_d         = sum(tie_sum_r(st,:),'all');
+    total_full_swaps_d   = sum(tie_swap_sum_r(st,:),'all');
+    total_actual_swaps_d = sum(swap_sum_r(st,:),'all');
+    total_comp_d         = sum(total_sum_r(st,:),'all');
 
     P_tie_d = total_ties_d / total_comp_d;
-    P_swap_given_tie_d = total_swaps_d / total_ties_d;
-    P_tie_and_swap_d = total_swaps_d / total_comp_d;
-    frac_last_stage_swaps_d = total_swaps_d / total_last_stage_swaps;
+    P_full_swap_given_tie_d = total_full_swaps_d / total_ties_d;
+    P_tie_and_full_swap_d = total_full_swaps_d / total_comp_d;
+    P_actual_swap_d = total_actual_swaps_d / total_comp_d;
+
+    frac_last_stage_full_swaps_d = total_full_swaps_d / total_last_stage_full_swaps;
+    frac_last_stage_actual_swaps_d = total_actual_swaps_d / total_last_stage_actual_swaps;
 
     rows = [rows; ...
-        d, st, total_ties_d, total_swaps_d, total_comp_d, ...
-        P_tie_d, P_swap_given_tie_d, P_tie_and_swap_d, ...
-        frac_last_stage_swaps_d];
+        d, st, total_ties_d, total_full_swaps_d, total_actual_swaps_d, total_comp_d, ...
+        P_tie_d, P_full_swap_given_tie_d, P_tie_and_full_swap_d, P_actual_swap_d, ...
+        frac_last_stage_full_swaps_d, frac_last_stage_actual_swaps_d];
 end
 
 LastStageSummary_r = array2table(rows, ...
     'VariableNames', ...
-    {'distance','step','total_ties','full_swaps','total_comparisons', ...
-     'P_tie','P_full_swap_given_tie','P_tie_and_full_swap', ...
-     'fraction_of_last_stage_full_swaps'});
+    {'distance','step','total_ties','full_swaps_inside_ties','actual_msb3_swaps','total_comparisons', ...
+     'P_tie','P_full_swap_given_tie','P_tie_and_full_swap','P_actual_MSB3_swap', ...
+     'fraction_of_last_stage_full_swaps','fraction_of_last_stage_actual_swaps'});
 
 LastStageSummary_r = sortrows(LastStageSummary_r, 'distance', 'ascend');
 
@@ -351,7 +429,7 @@ fprintf('\nLAST-STAGE DISTANCE SUMMARY FOR rho = %.2f:\n', rho_sel);
 disp(LastStageSummary_r);
 
 %% Uniformity check
-valid_last2_psgt = p_swap_given_tie_r(last2_steps,:);
+valid_last2_psgt = p_full_swap_given_tie_r(last2_steps,:);
 valid_last2_psgt = valid_last2_psgt(~isnan(valid_last2_psgt));
 
 mean_psgt = mean(valid_last2_psgt);
@@ -365,63 +443,22 @@ fprintf('std  = %.4f\n', std_psgt);
 fprintf('min  = %.4f\n', min_psgt);
 fprintf('max  = %.4f\n', max_psgt);
 
-%% Correlation between tie probability and full-swap fraction
-corr_last2 = corr(Last2Summary_r.P_tie, Last2Summary_r.fraction_of_last2_full_swaps);
-corr_last_stage = corr(LastStageSummary_r.P_tie, LastStageSummary_r.fraction_of_last_stage_full_swaps);
+%% Correlation checks
+corr_full_last2 = corr(Last2Summary_r.P_tie, Last2Summary_r.fraction_of_last2_full_swaps);
+corr_full_last_stage = corr(LastStageSummary_r.P_tie, LastStageSummary_r.fraction_of_last_stage_full_swaps);
+
+corr_actual_last2 = corr(Last2Summary_r.P_actual_MSB3_swap, Last2Summary_r.fraction_of_last2_actual_swaps);
+corr_actual_last_stage = corr(LastStageSummary_r.P_actual_MSB3_swap, LastStageSummary_r.fraction_of_last_stage_actual_swaps);
 
 fprintf('\nDISTANCE EFFECT CHECK, rho = %.2f:\n', rho_sel);
-fprintf('corr(P_tie, full-swap fraction) last two stages = %.4f\n', corr_last2);
-fprintf('corr(P_tie, full-swap fraction) last stage      = %.4f\n', corr_last_stage);
+fprintf('corr(P_tie, full-swap fraction) last two stages       = %.4f\n', corr_full_last2);
+fprintf('corr(P_tie, full-swap fraction) last stage            = %.4f\n', corr_full_last_stage);
+fprintf('corr(P_actual_swap, actual-swap fraction) last two    = %.4f\n', corr_actual_last2);
+fprintf('corr(P_actual_swap, actual-swap fraction) last stage  = %.4f\n', corr_actual_last_stage);
 
-%% CAE concentration ranking
-last2_mask = false(n_steps,n_cae);
-last2_mask(last2_steps,:) = true;
-
-valid = last2_mask & (tie_swap_sum_r > 0);
-[step_id, cae_id] = find(valid);
-
-T_last2_r = table( ...
-    step_id, ...
-    step_outer(step_id), ...
-    step_local(step_id), ...
-    step_dist(step_id), ...
-    cae_id, ...
-    tie_sum_r(valid), ...
-    tie_swap_sum_r(valid), ...
-    total_sum_r(valid), ...
-    p_tie_r(valid), ...
-    p_swap_given_tie_r(valid), ...
-    p_tie_and_swap_r(valid), ...
-    'VariableNames', ...
-    {'step','outer_stage','local_step','distance','cae', ...
-     'tie_count','full_swap_count','total_count', ...
-     'P_tie','P_full_swap_given_tie','P_tie_and_full_swap'} ...
-);
-
-T_last2_r = sortrows(T_last2_r, 'full_swap_count', 'descend');
-
-total_swaps_last2 = sum(tie_swap_sum_r(last2_steps,:),'all');
-T_last2_r.cum_full_swaps = cumsum(T_last2_r.full_swap_count);
-T_last2_r.cum_fraction = T_last2_r.cum_full_swaps / total_swaps_last2;
-
-fprintf('\nCAE CONCENTRATION FOR rho = %.2f:\n', rho_sel);
-fprintf('Total CAEs in last two stages : %d\n', numel(last2_steps)*n_cae);
-fprintf('CAEs with full swaps          : %d\n', height(T_last2_r));
-fprintf('Total full swaps              : %d\n', total_swaps_last2);
-
-Klist = [10 50 100 200 400 800 1200 1600];
-
-fprintf('\nTop-K cumulative full-swap fraction:\n');
-for kk = 1:length(Klist)
-    Ksel = Klist(kk);
-    if Ksel <= height(T_last2_r)
-        fprintf('Top %4d -> fraction=%.4f\n', Ksel, T_last2_r.cum_fraction(Ksel));
-    end
-end
-
-%% Diagnostic Plot 4: heatmap
+%% Diagnostic Plot 7: heatmap full swap inside ties
 figure; clf;
-imagesc(p_swap_given_tie_r(last2_steps,:));
+imagesc(p_full_swap_given_tie_r(last2_steps,:));
 colorbar;
 caxis([0 1]);
 xlabel('CAE index','Interpreter','latex');
@@ -431,36 +468,40 @@ yticklabels(last2_dist_labels);
 title(sprintf('$P(\\mathrm{full\\ swap}\\mid\\mathrm{MSB3\\ tie})$, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
     ebn0, rho_sel), 'Interpreter','latex');
 
-%% Diagnostic Plot 5: distance/step summary
+%% Diagnostic Plot 8: heatmap actual MSB3 swap probability
+figure; clf;
+imagesc(p_actual_swap_r(last2_steps,:));
+colorbar;
+caxis([0 1]);
+xlabel('CAE index','Interpreter','latex');
+ylabel('Last-two-stage step','Interpreter','latex');
+yticks(1:numel(last2_steps));
+yticklabels(last2_dist_labels);
+title(sprintf('$P(\\mathrm{actual\\ MSB3\\ swap})$, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
+    ebn0, rho_sel), 'Interpreter','latex');
+
+%% Diagnostic Plot 9: step summary
 figure; clf;
 plot(Last2Summary_r.step, Last2Summary_r.P_tie, '-o'); hold on;
 plot(Last2Summary_r.step, Last2Summary_r.P_full_swap_given_tie, '-s');
 plot(Last2Summary_r.step, Last2Summary_r.P_tie_and_full_swap, '-^');
+plot(Last2Summary_r.step, Last2Summary_r.P_actual_MSB3_swap, '-d');
 grid on;
 xlabel('Bitonic step in last two stages','Interpreter','latex');
 ylabel('Probability','Interpreter','latex');
 legend({'$P(\mathrm{MSB3\ tie})$', ...
         '$P(\mathrm{full\ swap}\mid\mathrm{MSB3\ tie})$', ...
-        '$P(\mathrm{MSB3\ tie\ and\ full\ swap})$'}, ...
+        '$P(\mathrm{MSB3\ tie\ and\ full\ swap})$', ...
+        '$P(\mathrm{actual\ MSB3\ swap})$'}, ...
         'Interpreter','latex', 'Location','best');
-title(sprintf('Tie and full-swap statistics by step, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
+title(sprintf('Tie and swap statistics by step, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
     ebn0, rho_sel), 'Interpreter','latex');
 
-%% Diagnostic Plot 6: full-swap fraction by last-stage distance
+%% Diagnostic Plot 10: actual swap fraction by last-stage distance
 figure; clf;
-bar(LastStageSummary_r.distance, LastStageSummary_r.fraction_of_last_stage_full_swaps);
+bar(LastStageSummary_r.distance, LastStageSummary_r.fraction_of_last_stage_actual_swaps);
 grid on;
 xlabel('Last-stage distance $j$','Interpreter','latex');
-ylabel('Fraction of last-stage full swaps','Interpreter','latex');
-title(sprintf('Distribution of MSB3-tie full-swaps by last-stage distance, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
+ylabel('Fraction of last-stage actual MSB3 swaps','Interpreter','latex');
+title(sprintf('Distribution of actual MSB3 swaps by last-stage distance, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
     ebn0, rho_sel), 'Interpreter','latex');
-
-%% Diagnostic Plot 7: CAE concentration curve
-figure; clf;
-plot(1:height(T_last2_r), T_last2_r.cum_fraction, 'LineWidth', 1.5);
-grid on;
-xlabel('Top-$K$ CAEs ranked by full-swap count','Interpreter','latex');
-ylabel('Cumulative fraction of full swaps','Interpreter','latex');
-title(sprintf('CAE-level concentration of MSB3-tie full-swaps, $E_b/N_0=%g$ dB, $\\rho=%.1f$', ...
-    ebn0, rho_sel), 'Interpreter','latex');
-ylim([0 1]);

@@ -1,15 +1,40 @@
 /* ==========================================================
- * Precision-aware bitonic sorter MEX with per-CAE MSB tie
- * and tie-swap bias counters
+ * Precision-aware bitonic sorter MEX with per-CAE counters
  *
- * Supports selectable 5-bit magnitude quantization:
- *   quant_mode = 0 : linear
- *   quant_mode = 1 : logarithmic
- *   quant_mode = 2 : power-law
+ * File:
+ *   corr_cae_tie_bias_mex.c
  *
  * MATLAB:
- *   [sorted_idx, tie_count, total_count, tie_swap_count] = ...
- *       pa_cae_tie_bias_mex(y_soft)
+ *   [sorted_idx, tie_count, total_count, tie_swap_count, swap_count] = ...
+ *       corr_cae_tie_bias_mex(y_soft)
+ *
+ * Outputs:
+ *   sorted_idx       : n x 1 uint32, MATLAB 1-based sorted indices
+ *   tie_count        : n_steps x n_cae uint64
+ *   total_count      : n_steps x n_cae uint64
+ *   tie_swap_count   : n_steps x n_cae uint64
+ *   swap_count       : n_steps x n_cae uint64
+ *
+ * Meaning:
+ *   tie_count(step,cae):
+ *      number of MSB3 ties at that CAE location
+ *
+ *   total_count(step,cae):
+ *      number of valid comparisons at that CAE location
+ *
+ *   tie_swap_count(step,cae):
+ *      among MSB3 ties, number of cases where the full 5-bit
+ *      comparator would have swapped
+ *
+ *   swap_count(step,cae):
+ *      number of actual swaps performed by the simulated MSB3-only sorter
+ *      at that CAE location, over all valid comparisons
+ *
+ * Metrics in MATLAB:
+ *   p_tie = double(tie_count) ./ double(total_count);
+ *   p_swap_given_tie = double(tie_swap_count) ./ double(tie_count);
+ *   p_swap = double(swap_count) ./ double(total_count);
+ *
  * ========================================================== */
 
 #include "mex.h"
@@ -42,75 +67,7 @@ static uint64_t num_bitonic_steps_cae_bias_u64(uint64_t n_effective)
 }
 
 /* ----------------------------------------------------------
- * Selectable nonlinear 5-bit magnitude quantizer
- *
- * quant_mode:
- *   0 = linear:
- *       q = round(a / LLR_max * 31)
- *
- *   1 = logarithmic:
- *       q = round(log(1 + alpha*a) /
- *                 log(1 + alpha*LLR_max) * 31)
- *
- *   2 = power-law:
- *       q = round((a / LLR_max)^gamma * 31)
- *
- * Notes:
- *   gamma < 1 expands small magnitudes.
- *   gamma > 1 compresses small magnitudes.
- *   alpha larger -> stronger log compression.
- * ---------------------------------------------------------- */
-static uint8_t quantize_llr_mag(
-    double L,
-    double LLR_max,
-    int quant_mode,
-    double alpha,
-    double gamma
-)
-{
-    double a = fabs(L);
-    double q_real;
-
-    if (a > LLR_max) {
-        a = LLR_max;
-    }
-
-    if (quant_mode == 0) {
-        q_real = (a / LLR_max) * 31.0;
-    }
-    else if (quant_mode == 1) {
-        if (alpha <= 0.0) {
-            q_real = (a / LLR_max) * 31.0;
-        } else {
-            q_real = log(1.0 + alpha * a) /
-                     log(1.0 + alpha * LLR_max) * 31.0;
-        }
-    }
-    else if (quant_mode == 2) {
-        if (gamma <= 0.0) {
-            q_real = (a / LLR_max) * 31.0;
-        } else {
-            q_real = pow(a / LLR_max, gamma) * 31.0;
-        }
-    }
-    else {
-        q_real = (a / LLR_max) * 31.0;
-    }
-
-    long q_long = lround(q_real);
-
-    if (q_long < 0) {
-        q_long = 0;
-    }
-    if (q_long > 31) {
-        q_long = 31;
-    }
-
-    return (uint8_t)q_long;
-}
-
-/* ----------------------------------------------------------
- * MSB3 sorter with per-CAE full-magnitude tie-swap observation
+ * MSB3 sorter with per-CAE counters
  * ---------------------------------------------------------- */
 static void bitonic_sort_count_cae_tie_bias(
     uint8_t  *arr_msb,
@@ -121,7 +78,8 @@ static void bitonic_sort_count_cae_tie_bias(
     uint64_t  n_steps,
     uint64_t *tie_count,
     uint64_t *total_count,
-    uint64_t *tie_swap_count
+    uint64_t *tie_swap_count,
+    uint64_t *swap_count
 )
 {
     uint64_t w, j, i, l;
@@ -137,17 +95,38 @@ static void bitonic_sort_count_cae_tie_bias(
 
                 if (l > i) {
 
+                    /*
+                     * MATLAB uses column-major layout.
+                     * Matrix size is n_steps x n_cae.
+                     * Element (step_idx, cae_idx) maps to:
+                     *   idx = step_idx + cae_idx * n_steps
+                     */
                     uint64_t idx = step_idx + cae_idx * n_steps;
-                    int ascending = ((i & w) == 0);
 
-                    if ((i < n) && (l < n)) {
+                    int ascending = ((i & w) == 0);
+                    int valid_cmp = ((i < n) && (l < n));
+
+                    /*
+                     * Actual simulated sorter path:
+                     * MSB3-only. On MSB3 ties, keep order.
+                     */
+                    int do_swap = ((ascending  && (arr_msb[i] > arr_msb[l])) ||
+                                   (!ascending && (arr_msb[i] < arr_msb[l])));
+
+                    if (valid_cmp) {
                         total_count[idx]++;
+
+                        if (do_swap) {
+                            swap_count[idx]++;
+                        }
 
                         if (arr_msb[i] == arr_msb[l]) {
                             tie_count[idx]++;
 
                             /*
-                             * Full 5-bit comparator decision under MSB3 tie.
+                             * Diagnostic question:
+                             * If MSB3 ties here, would the full 5-bit
+                             * comparator have swapped?
                              */
                             if ((ascending  && (arr_full[i] > arr_full[l])) ||
                                 (!ascending && (arr_full[i] < arr_full[l]))) {
@@ -156,12 +135,7 @@ static void bitonic_sort_count_cae_tie_bias(
                         }
                     }
 
-                    /*
-                     * Actual simulated sorter path:
-                     * MSB3-only. On MSB3 ties, keep order.
-                     */
-                    if ((ascending  && (arr_msb[i] > arr_msb[l])) ||
-                        (!ascending && (arr_msb[i] < arr_msb[l]))) {
+                    if (do_swap) {
 
                         uint8_t  tmp_msb  = arr_msb[i];
                         uint8_t  tmp_full = arr_full[i];
@@ -192,30 +166,14 @@ static void pa_sorter_with_cae_tie_bias_counters(
     uint32_t     *sorted_idx_out,
     uint64_t     *tie_count,
     uint64_t     *total_count,
-    uint64_t     *tie_swap_count
+    uint64_t     *tie_swap_count,
+    uint64_t     *swap_count
 )
 {
     const double LLR_max = 31.0;
 
     const int B_mag   = 5;
     const int MSB_NUM = 3;
-
-    /*
-     * Choose quantizer here:
-     *
-     * quant_mode = 0 -> current linear quantization
-     * quant_mode = 1 -> logarithmic quantization
-     * quant_mode = 2 -> power-law quantization
-     */
-    const int quant_mode = 0;
-
-    /*
-     * Parameters:
-     *   alpha used only for log mode.
-     *   gamma used only for power-law mode.
-     */
-    const double alpha = 0.5;
-    const double gamma = 0.5;
 
     const uint64_t msb_shift = (uint64_t)(B_mag - MSB_NUM);
     const uint8_t  pad_msb   = (uint8_t)((1U << MSB_NUM) - 1U);
@@ -236,16 +194,12 @@ static void pa_sorter_with_cae_tie_bias_counters(
     }
 
     for (uint64_t i = 0; i < n; i++) {
-
         double L = fmax(fmin(y_soft[i], LLR_max), -LLR_max);
+        uint8_t mag_q = (uint8_t)llround(fabs(L));
 
-        uint8_t mag_q = quantize_llr_mag(
-            L,
-            LLR_max,
-            quant_mode,
-            alpha,
-            gamma
-        );
+        if (mag_q > 31U) {
+            mag_q = 31U;
+        }
 
         LLR_mag_full[i] = mag_q;
         LLR_mag_msb[i]  = (uint8_t)(mag_q >> msb_shift);
@@ -267,7 +221,8 @@ static void pa_sorter_with_cae_tie_bias_counters(
         n_steps,
         tie_count,
         total_count,
-        tie_swap_count
+        tie_swap_count,
+        swap_count
     );
 
     for (uint64_t i = 0; i < n; i++) {
@@ -285,11 +240,11 @@ static void pa_sorter_with_cae_tie_bias_counters(
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     if (nrhs != 1) {
-        mexErrMsgTxt("Usage: [sorted_idx, tie_count, total_count, tie_swap_count] = pa_cae_tie_bias_mex(y_soft)");
+        mexErrMsgTxt("Usage: [sorted_idx, tie_count, total_count, tie_swap_count, swap_count] = pa_cae_tie_bias_mex(y_soft)");
     }
 
-    if (nlhs != 4) {
-        mexErrMsgTxt("Four outputs required: sorted_idx, tie_count, total_count, tie_swap_count.");
+    if (nlhs != 5) {
+        mexErrMsgTxt("Five outputs required: sorted_idx, tie_count, total_count, tie_swap_count, swap_count.");
     }
 
     if (!mxIsDouble(prhs[0]) || mxIsComplex(prhs[0])) {
@@ -322,12 +277,17 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     uint64_t *tie_swap_count = (uint64_t *)mxGetData(plhs[3]);
     memset(tie_swap_count, 0, (size_t)n_steps * (size_t)n_cae * sizeof(uint64_t));
 
+    plhs[4] = mxCreateNumericMatrix((mwSize)n_steps, (mwSize)n_cae, mxUINT64_CLASS, mxREAL);
+    uint64_t *swap_count = (uint64_t *)mxGetData(plhs[4]);
+    memset(swap_count, 0, (size_t)n_steps * (size_t)n_cae * sizeof(uint64_t));
+
     pa_sorter_with_cae_tie_bias_counters(
         y_soft,
         n,
         sorted_idx,
         tie_count,
         total_count,
-        tie_swap_count
+        tie_swap_count,
+        swap_count
     );
 }
