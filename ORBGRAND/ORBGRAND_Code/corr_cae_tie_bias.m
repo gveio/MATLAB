@@ -19,7 +19,7 @@ clear; clc;
 
 %% User options
 code_class = 'CRC';     % 'CAPOLAR' or 'CRC'
-ebn0       = 7;
+ebn0       = 9;
 nFrames    = 3e4;
 
 rho_list = [0 0.3 0.5 0.7 0.9 -0.3 -0.5 -0.7 -0.9];
@@ -155,11 +155,29 @@ for rid = 1:nrho
         %% Received signal
         rSig = modOut + noise;
 
-        %% MATLAB BPSK demodulation
-        y_soft = nrSymbolDemodulate(rSig.', modulation, sigma2);
-        y_soft = y_soft(1:n).';
+        %% Correlation-aware BPSK LLR from Eq. (15)
+        % Paper convention gives lambda = log P(x=-1|y)/P(x=+1|y),
+        % while nrSymbolDemodulate gives positive LLR for +1.
+        % Therefore we flip the sign to match the existing ORBGRAND convention.
+        
+        y = real(rSig(:)).';     % force real row vector
+        y_prev = [y(1), y(1:end-1)];
+        
+        if abs(rho) < 1e-12
+            y_soft = 2*y/sigma2;
+        else
+            lambda_paper = ( ...
+                -2*y + 2*rho*y_prev ...
+                + abs(y_prev - rho*y - rho) ...
+                - abs(y_prev - rho*y + rho) ...
+                ) ./ (sigma2*(1-rho^2));
+        
+            y_soft = -lambda_paper;
+            y_soft(1) = 2*y(1)/sigma2;
+        end
 
-        %% MEX diagnostic
+        y_soft = double(real(y_soft(:)));   % force real double column
+        
         [~, tie_c, total_c, tie_swap_c, swap_c] = corr_cae_tie_bias_mex(y_soft);
 
         tie_sum      = tie_sum      + double(tie_c);
