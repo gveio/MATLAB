@@ -10,7 +10,7 @@ k=240;
 n_CODES = 0;
 
 % ORBGRAND
-DECODER = 'ORBGRAND-MSB-3';
+DECODER = 'ORBGRAND-BASELINE';
 
 code.class = 'CRC';
 poly='0xd175';
@@ -23,7 +23,7 @@ code.color = 'r';
 codes(n_CODES).code = code; 
 
 
-DECODER = 'ORBGRAND-MSB2-TIEBREAK-2';
+DECODER = 'ORBGRAND-MSB3-TIEBREAK2';
 
 code.class = 'CRC';
 poly='0xd175';

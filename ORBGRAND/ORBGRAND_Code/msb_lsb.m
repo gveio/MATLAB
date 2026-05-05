@@ -15,7 +15,10 @@ B_mag = 5;
 LLR_max = 31;
 N = 2e6;
 
-bit_labels = {'MSB$_4$','MSB$_3$','MSB$_2$','LSB$_1$','LSB$_0$'};
+% Bit positions of the 5-bit magnitude word, MSB -> LSB
+bit_labels = {'4','3','2','1','0'};
+print_labels = {'bit4','bit3','bit2','bit1','bit0'};
+
 P01_all = zeros(length(EbN0_list), B_mag);
 
 random_ref = 0.25;
@@ -42,7 +45,7 @@ for e = 1:length(EbN0_list)
 
     bit_mat = zeros(N, B_mag);
     for b = 1:B_mag
-        bit_pos_from_lsb = B_mag - b;
+        bit_pos_from_lsb = B_mag - b;   % 4,3,2,1,0
         bit_mat(:,b) = bitget(uint8(mag_q), bit_pos_from_lsb + 1);
     end
 
@@ -71,8 +74,7 @@ make_fig(EbN0_list, P01_all, bit_labels, random_ref, transition_x);
 
 %% Summary table
 fprintf('\nBit-transition P(0->1) summary:\n');
-T = array2table(P01_all, 'VariableNames', ...
-    {'MSB4','MSB3','MSB2','LSB1','LSB0'});
+T = array2table(P01_all, 'VariableNames', print_labels);
 T.EbN0_dB = EbN0_list(:);
 T = movevars(T, 'EbN0_dB', 'Before', 1);
 disp(T);
@@ -81,7 +83,7 @@ fprintf('\nTransition analysis:\n');
 fprintf('Random-bit reference P(0->1) = %.2f\n', random_ref);
 fprintf('Tolerance = %.3f\n', tol);
 fprintf('Estimated useful MSB word length = %d bits\n', useful_bits);
-fprintf('Useful bits kept: ');
+fprintf('Useful bit positions kept: ');
 disp(bit_labels(1:useful_bits));
 
 %% ==========================================================
@@ -139,7 +141,7 @@ function make_fig(EbN0_list, P01_all, bit_labels, random_ref, transition_x)
     box on;
 
     xlim([0.7 5.3]);
-    ylim([0 0.30]);
+    ylim([-0.055 0.30]);
 
     xticks(1:5);
     xticklabels(bit_labels);
@@ -147,6 +149,17 @@ function make_fig(EbN0_list, P01_all, bit_labels, random_ref, transition_x)
 
     xlabel('5-bit LLR magnitude bit position','FontSize',FONT);
     ylabel('$P(0 \rightarrow 1)$','FontSize',FONT);
+
+    % Group labels below the x-axis
+    text(2, -0.045, 'MSBs', ...
+        'HorizontalAlignment','center', ...
+        'Interpreter','latex', ...
+        'FontSize', AXIS_FONT);
+
+    text(4.5, -0.045, 'LSBs', ...
+        'HorizontalAlignment','center', ...
+        'Interpreter','latex', ...
+        'FontSize', AXIS_FONT);
 
     lgd = legend('show','Location','southeast');
     lgd.FontSize = 7;
