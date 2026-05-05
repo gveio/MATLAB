@@ -164,6 +164,11 @@ function make_fig(EbN0_list, P01_all, bit_labels, random_ref, transition_x)
     lgd = legend('show','Location','southeast');
     lgd.FontSize = 7;
     lgd.Box = 'on';
+    
+    pos = lgd.Position;
+pos(2) = pos(2) + 0.09;
+pos(1) = pos(1) - 0.03;
+    lgd.Position = pos;
 
     set(gcf,'Renderer','painters');
     exportgraphics(gcf,'llr_bit_transition.pdf','ContentType','vector');
