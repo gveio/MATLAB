@@ -380,6 +380,6 @@ function [idx, tieCnt, cmpCnt] = bitonic_sort_pa(mag, msbBits, Bmag)
     % is not desired for non-hardware experiments.
     shift = Bmag - msbBits;
     key = floor(double(vals)/2^shift);
-    [~, p] = sort(key,'ascend','stable');
+    [~, p] = sort(key,'ascend');
     idx = idx(p);
 end
