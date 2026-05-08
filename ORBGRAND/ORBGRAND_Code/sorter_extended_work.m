@@ -3,7 +3,7 @@ clear; clc; close all;
 %% Parameters
 n        = 256;
 Bmag     = 5;
-msbBits  = 3;
+msbBits  = 5;
 LWmax    = 104;
 nFrames  = 2000;
 EbN0dB   = 7;
