@@ -32,7 +32,7 @@ filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num
 load(filename,'code');
 code.decoder = 'MSB$_2$';
 code.LT = '-o';
-code.color = [0.8500 0.3250 0.0980];
+code.color = [0.00 0.55 0.55];
 codes(n_CODES).code = code;
 
 % -------------------------
@@ -44,7 +44,7 @@ filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num
 load(filename,'code');
 code.decoder = 'MSB$_3$';
 code.LT = '-s';
-code.color = [0 0.4470 0.7410];
+code.color = [0.75 0.30 0.30];
 codes(n_CODES).code = code;
 
 % -------------------------
@@ -56,7 +56,7 @@ filename = ['../RESULTS/' DECODER '_' code.class '_' poly '_' num2str(n) '_' num
 load(filename,'code');
 code.decoder = 'MSB$_4$';
 code.LT = '-^';
-code.color = [0.4660 0.6740 0.1880];
+code.color = [0.68 0.80 0.45];
 codes(n_CODES).code = code;
 
 % -------------------------
