@@ -96,12 +96,7 @@ function make_fig(EbN0_list, P01_all, bit_labels, random_ref, transition_x)
     MS = 3.5;
     LW = 1.5;
 
-    colors = [
-        0.0000 0.4470 0.7410
-        0.8500 0.3250 0.0980
-        0.4660 0.6740 0.1880
-        0.4940 0.1840 0.5560
-    ];
+    colors = lines(length(EbN0_list));
 
     markers = {'-o','-s','-^','-d'};
 
@@ -170,6 +165,10 @@ pos(2) = pos(2) + 0.09;
 pos(1) = pos(1) - 0.03;
     lgd.Position = pos;
 
+    pos = lgd.Position;
+    pos(2) = pos(2) +0.09;
+    pos(1) = pos(1) -0.03;
+    lgd.Position = pos;
     set(gcf,'Renderer','painters');
     exportgraphics(gcf,'llr_bit_transition.pdf','ContentType','vector');
 
